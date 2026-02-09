@@ -12,7 +12,7 @@ import BlogPostPage from './pages/BlogPostPage';
 
 export default function App() {
   return (
-    <BrowserRouter basename="/oilgascity">
+    <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<HomePage />} />
