@@ -204,10 +204,10 @@ systemctl start oilgascity-wagtail
 Добавить в `server {}` блок:
 
 ```nginx
-# React frontend
-location /oilgascity/ {
-    alias /opt/oilgascity-wagtail/frontend/dist/;
-    try_files $uri $uri/ /oilgascity/index.html;
+# React frontend (корень домена oilgascity.ru)
+location / {
+    root /opt/oilgascity-wagtail/frontend/dist;
+    try_files $uri $uri/ /index.html;
     expires 30d;
 }
 
