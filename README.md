@@ -19,9 +19,10 @@ React (`/cities/<id>`, `/blog/<id>` и т.д.): это делает `FrontendUrl
 `backend/home/models.py`, базовый адрес задаёт `FRONTEND_BASE_URL`.
 
 **Деплой.** Push в `main` запускает GitHub Actions (`.github/workflows/deploy.yml`):
-на сервере выполняется `deploy.sh` (git pull, collectstatic, migrate, перезапуск
-gunicorn). Фронтенд этот скрипт не пересобирает: после правок в `frontend/`
-нужен `npm run build` на сервере.
+на сервере выполняется `deploy.sh` (git pull), а затем `scripts/deploy.sh` из репозитория:
+зависимости, `check --deploy`, migrate, collectstatic, перезапуск gunicorn и проверка,
+что API отвечает. Любая ошибка останавливает деплой и роняет job в Actions.
+Фронтенд скрипт не пересобирает: после правок в `frontend/` нужен `npm run build` на сервере.
 
 ---
 
@@ -173,43 +174,42 @@ cd /opt/oilgascity-wagtail
 
 # 2. Python окружение
 python3 -m venv venv
-source venv/bin/activate
-pip install -r backend/requirements.txt
+venv/bin/pip install -r backend/requirements.txt
 
-# 3. База данных
-cd backend
-python manage.py migrate
-python manage.py createsuperuser
+# 3. Секреты: только на сервере, права 600
+umask 077
+{
+  echo "DJANGO_SETTINGS_MODULE=backend.settings.production"
+  echo "DJANGO_SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(50))')"
+} > /etc/oilgascity-wagtail.env
 
-# 4. Статика Django
-python manage.py collectstatic --noinput
+# 4. Gunicorn (systemd): юнит с ExecStart
+#    gunicorn backend.wsgi:application --bind 127.0.0.1:8003 --workers 2 --timeout 120
+#    (Type=notify, WorkingDirectory=/opt/oilgascity-wagtail/backend) и drop-in с секретами:
+mkdir -p /etc/systemd/system/oilgascity-wagtail.service.d
+printf '[Service]\nEnvironmentFile=/etc/oilgascity-wagtail.env\n' \
+    > /etc/systemd/system/oilgascity-wagtail.service.d/env.conf
+systemctl daemon-reload && systemctl enable oilgascity-wagtail
 
-# 5. Фронтенд
-cd ../frontend
-npm install
-npm run build
+# 5. Обёртка деплоя, её вызывает GitHub Actions (в git не хранится)
+printf '#!/bin/bash\nset -euo pipefail\ncd /opt/oilgascity-wagtail\ngit pull --ff-only origin main\nexec bash scripts/deploy.sh\n' \
+    > deploy.sh
 
-# 6. Gunicorn (systemd)
-cat > /etc/systemd/system/oilgascity-wagtail.service << EOF
-[Unit]
-Description=OilGasCity Wagtail (gunicorn)
-After=network.target
+# 6. Суперпользователь и первый деплой (manage.py на сервере запускать только с секретами)
+set -a; . /etc/oilgascity-wagtail.env; set +a
+venv/bin/python backend/manage.py migrate
+venv/bin/python backend/manage.py createsuperuser
+bash scripts/deploy.sh
 
-[Service]
-User=root
-WorkingDirectory=/opt/oilgascity-wagtail/backend
-ExecStart=/opt/oilgascity-wagtail/venv/bin/gunicorn backend.wsgi:application --bind 127.0.0.1:8003 --workers 3
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl daemon-reload
-systemctl enable oilgascity-wagtail
-systemctl start oilgascity-wagtail
+# 7. Фронтенд (scripts/deploy.sh его не собирает)
+cd frontend && npm ci && npm run build
 ```
+
+Настройки прода в `backend/backend/settings/production.py`: DEBUG выключен, секреты
+берутся из окружения, без `DJANGO_SECRET_KEY` gunicorn не стартует. `dev.py` нужен
+только для локальной разработки. Необязательные переменные: `DJANGO_ALLOWED_HOSTS`,
+`DJANGO_CSRF_TRUSTED_ORIGINS`, `FRONTEND_BASE_URL`, `WAGTAILAPI_BASE_URL`,
+`WAGTAILADMIN_BASE_URL`, `DJANGO_LOG_LEVEL`.
 
 ### Конфигурация nginx
 
@@ -229,6 +229,15 @@ location /wt-api/ {
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+# Документы Wagtail (PDF публикаций), их отдаёт Django
+location /documents/ {
+    proxy_pass http://127.0.0.1:8003;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
 }
 
 # Wagtail admin

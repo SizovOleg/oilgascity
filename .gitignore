@@ -22,3 +22,6 @@ backend/static/
 .DS_Store
 Thumbs.db
 nohup.out
+
+# Обёртка деплоя живёт только на сервере (git pull + scripts/deploy.sh)
+/deploy.sh

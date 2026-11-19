@@ -47,10 +47,12 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "corsheaders",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -137,11 +139,12 @@ STATICFILES_DIRS = [
     PROJECT_DIR / "static",
 ]
 
+# Префиксы совпадают с location в nginx (/oilgascity-static/, /oilgascity-media/)
 STATIC_ROOT = BASE_DIR / "static"
-STATIC_URL = "/static/"
+STATIC_URL = "/oilgascity-static/"
 
 MEDIA_ROOT = BASE_DIR / "media"
-MEDIA_URL = "/media/"
+MEDIA_URL = "/oilgascity-media/"
 
 # Default storage settings
 # See https://docs.djangoproject.com/en/6.0/ref/settings/#std-setting-STORAGES
@@ -184,3 +187,6 @@ WAGTAILADMIN_BASE_URL = os.environ.get("WAGTAILADMIN_BASE_URL", "https://oilgasc
 # if untrusted users are allowed to upload files -
 # see https://docs.wagtail.org/en/stable/advanced_topics/deploying.html#user-uploaded-files
 WAGTAILDOCS_EXTENSIONS = ['csv', 'docx', 'key', 'odt', 'pdf', 'pptx', 'rtf', 'txt', 'xlsx', 'zip']
+
+# API только на чтение и без cookies (CORS_ALLOW_CREDENTIALS выключен), поэтому открыт для любых сайтов
+CORS_ALLOW_ALL_ORIGINS = True
