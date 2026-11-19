@@ -1,0 +1,10 @@
+[Unit]
+Description=OilGasCity: бэкап базы и media (локально и в B2)
+After=rclone-b2.service
+Wants=rclone-b2.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/oilgascity-wagtail/scripts/backup.sh
+Nice=10
+IOSchedulingClass=idle

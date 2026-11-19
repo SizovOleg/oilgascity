@@ -305,10 +305,35 @@ systemctl restart oilgascity-wagtail
 cd /opt/oilgascity-wagtail/frontend
 npm run build
 
-# Бэкап (критически важно!)
-tar czf /tmp/oilgascity-backup-$(date +%Y%m%d).tar.gz \
-    /opt/oilgascity-wagtail/backend/db.sqlite3 \
-    /opt/oilgascity-wagtail/backend/media/
+# Внеочередной бэкап
+systemctl start oilgascity-backup && journalctl -u oilgascity-backup -n 20 --no-pager
+```
+
+### Бэкапы
+
+`scripts/backup.sh` по таймеру `oilgascity-backup.timer` (1-е число месяца, ночью; пропуск
+наверстывается после включения сервера) делает архив `oilgascity-ГГГГММДД-ЧЧММ.tar.gz`:
+копию SQLite (проверенную `integrity_check`) и папку `media/`. Архив кладётся в
+`/opt/backups/oilgascity/` и во внешнее хранилище B2 (`/mnt/b2/backups/oilgascity/`),
+хранятся последние 6. Ошибка, в том числе отсутствие B2, роняет юнит: её видно в
+`systemctl --failed`.
+
+Установка юнитов:
+
+```bash
+cp /opt/oilgascity-wagtail/scripts/systemd/oilgascity-backup.* /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now oilgascity-backup.timer
+```
+
+Восстановление:
+
+```bash
+systemctl stop oilgascity-wagtail
+cd /tmp && tar -xzf /opt/backups/oilgascity/oilgascity-ГГГГММДД-ЧЧММ.tar.gz
+cp /opt/oilgascity-wagtail/backend/db.sqlite3 /opt/oilgascity-wagtail/backend/db.sqlite3.before-restore
+cp /tmp/db.sqlite3 /opt/oilgascity-wagtail/backend/db.sqlite3
+rsync -a /tmp/media/ /opt/oilgascity-wagtail/backend/media/
+systemctl start oilgascity-wagtail
 ```
 
 ---
