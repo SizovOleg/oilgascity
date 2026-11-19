@@ -25,6 +25,9 @@ location /oilgascity-media/ {
     # Служебные заголовки хранилища посетителю не нужны
     proxy_hide_header x-amz-request-id;
     proxy_hide_header x-amz-id-2;
+    proxy_hide_header x-amz-version-id;
+    proxy_hide_header x-amz-server-side-encryption;
+    proxy_hide_header x-amz-meta-src_last_modified_millis;
     proxy_hide_header x-bz-content-sha1;
     proxy_hide_header x-bz-file-id;
     proxy_hide_header x-bz-file-name;
