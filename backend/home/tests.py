@@ -121,6 +121,18 @@ class FrontendUrlTests(WagtailPageTestCase):
                     response.json()["meta"]["html_url"], "https://oilgascity.ru" + path
                 )
 
+    def test_api_listing_html_url_points_to_frontend(self) -> None:
+        # Списки без type Wagtail строит из базовых Page, без FrontendUrlMixin
+        expected = {page.pk: "https://oilgascity.ru" + path for page, path in self.expected_paths()}
+        for query in (f"?child_of={self.home.pk}", "?limit=20", f"?descendant_of={self.home.pk}"):
+            with self.subTest(query=query):
+                response = self.client.get("/wt-api/v2/pages/" + query)
+                self.assertEqual(response.status_code, 200)
+                items = response.json()["items"]
+                self.assertTrue(items)
+                for item in items:
+                    self.assertEqual(item["meta"]["html_url"], expected[item["id"]])
+
     def test_admin_view_live_link_points_to_frontend(self) -> None:
         self.login()
         response = self.client.get(f"/cms/pages/{self.city.pk}/edit/")
