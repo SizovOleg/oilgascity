@@ -17,25 +17,35 @@ const cityIcon = L.divIcon({
   popupAnchor: [0, -16],
 });
 
-const CITIES_DATA = [
-  { name: 'Муравленко', region: 'ЯНАО', latitude: 63.79, longitude: 74.52, population: 32350, description: 'Молодой нефтегазовый город, основан в 1984 г.' },
-  { name: 'Когалым', region: 'ХМАО', latitude: 62.27, longitude: 74.48, population: 68200, description: 'Город нефтяников, основан в 1976 г., центр деятельности ЛУКОЙЛ.' },
-];
+// Центр по умолчанию, пока города не загрузились: север Западной Сибири
+const DEFAULT_CENTER = [63.0, 74.5];
 
-export default function CityMap({ className = '' }) {
+// Тексты из CMS вставляются в HTML попапа, поэтому экранируются
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
+));
+
+function popupHtml(city) {
+  const lines = [
+    `<div style="font-weight:700;font-size:14px;color:#0f172a">${esc(city.title)}</div>`,
+    city.region && `<div style="font-size:12px;color:#64748b;margin:4px 0">${esc(city.region)}</div>`,
+    city.founded && `<div style="font-size:12px;color:#475569">Основан: ${esc(city.founded)}</div>`,
+    city.population && `<div style="font-size:12px;color:#475569">Население: ${esc(city.population)}</div>`,
+    `<div style="font-size:10px;color:#94a3b8;margin-top:6px">${city.latitude.toFixed(4)}°N, ${city.longitude.toFixed(4)}°E</div>`,
+  ];
+  return `<div style="font-family:Inter,system-ui,sans-serif;min-width:180px">${lines.filter(Boolean).join('')}</div>`;
+}
+
+// cities: страницы городов из API (поля title, region, founded, population, latitude, longitude)
+export default function CityMap({ cities = [], className = '' }) {
   const mapRef = useRef(null);
-  const mapInstanceRef = useRef(null);
 
   useEffect(() => {
-    if (!mapRef.current) return;
-    if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; }
-
-    const cities = CITIES_DATA;
-    const avgLat = cities.reduce((s, c) => s + c.latitude, 0) / cities.length;
-    const avgLng = cities.reduce((s, c) => s + c.longitude, 0) / cities.length;
+    if (!mapRef.current) return undefined;
+    const points = cities.filter((c) => c.latitude != null && c.longitude != null);
 
     const map = L.map(mapRef.current, {
-      center: [avgLat, avgLng], zoom: 6,
+      center: DEFAULT_CENTER, zoom: 6,
       zoomControl: true, scrollWheelZoom: false, attributionControl: false,
     });
 
@@ -44,35 +54,25 @@ export default function CityMap({ className = '' }) {
     }).addTo(map);
 
     L.control.attribution({ position: 'bottomright' })
-      .addAttribution('\u00a9 <a href="https://carto.com/">Esri, Maxar, Earthstar Geographics</a>')
+      .addAttribution('© <a href="https://carto.com/">Esri, Maxar, Earthstar Geographics</a>')
       .addTo(map);
 
-    const markers = [];
-    cities.forEach((city) => {
-      const marker = L.marker([city.latitude, city.longitude], { icon: cityIcon }).addTo(map);
-      marker.bindPopup(
-        '<div style="font-family:Inter,system-ui,sans-serif;min-width:180px">' +
-        '<div style="font-weight:700;font-size:14px;color:#0f172a">' + city.name + '</div>' +
-        '<div style="font-size:12px;color:#64748b;margin:4px 0">' + city.region + '</div>' +
-        (city.population ? '<div style="font-size:12px;color:#475569">Население: ' + city.population.toLocaleString('ru-RU') + ' чел.</div>' : '') +
-        (city.description ? '<div style="font-size:11px;color:#64748b;margin-top:6px;line-height:1.4">' + city.description + '</div>' : '') +
-        '<div style="font-size:10px;color:#94a3b8;margin-top:6px">' + city.latitude.toFixed(4) + '\u00b0N, ' + city.longitude.toFixed(4) + '\u00b0E</div>' +
-        '</div>',
-        { className: 'light-popup', maxWidth: 250 }
-      );
-      markers.push(marker);
-    });
+    const markers = points.map((city) => L.marker([city.latitude, city.longitude], { icon: cityIcon })
+      .bindPopup(popupHtml(city), { className: 'light-popup', maxWidth: 250 })
+      .addTo(map));
 
-    if (markers.length > 1) {
-      map.fitBounds(L.featureGroup(markers).getBounds().pad(0.3));
-    }
-
-    mapInstanceRef.current = map;
-    const ro = new ResizeObserver(() => map.invalidateSize());
+    // Масштаб подбирается заново при изменении размера контейнера: при анимации появления
+    // карта может создаться с нулевой шириной, и тогда fitBounds уводит её на весь мир
+    const fit = () => {
+      if (markers.length > 1) map.fitBounds(L.featureGroup(markers).getBounds().pad(0.3), { maxZoom: 9 });
+      else if (markers.length === 1) map.setView(markers[0].getLatLng(), 9);
+    };
+    fit();
+    const ro = new ResizeObserver(() => { map.invalidateSize(); fit(); });
     ro.observe(mapRef.current);
 
-    return () => { ro.disconnect(); map.remove(); mapInstanceRef.current = null; };
-  }, []);
+    return () => { ro.disconnect(); map.remove(); };
+  }, [cities]);
 
   return (
     <div className={className}>

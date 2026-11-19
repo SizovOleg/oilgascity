@@ -10,7 +10,7 @@ export default function BlogPage() {
   useEffect(() => {
     getPageByType('home.BlogIndexPage').then(res => {
       if (res.data.items.length > 0) {
-        getChildren(res.data.items[0].id).then(r => setPosts(r.data.items));
+        getChildren(res.data.items[0].id, 'home.BlogPost', '-date').then(r => setPosts(r.data.items));
       }
     });
   }, []);

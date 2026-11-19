@@ -8,5 +8,10 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 3000,
+    // Локальная разработка на данных прода: API и медиа проксируются на сайт (только для vite dev)
+    proxy: {
+      '/wt-api': { target: 'https://oilgascity.ru', changeOrigin: true, secure: true },
+      '/oilgascity-media': { target: 'https://oilgascity.ru', changeOrigin: true, secure: true },
+    },
   },
 })

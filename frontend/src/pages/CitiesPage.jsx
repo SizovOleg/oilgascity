@@ -7,11 +7,13 @@ import CityMap from '../components/CityMap';
 
 export default function CitiesPage() {
   const [cities, setCities] = useState([]);
+  const [intro, setIntro] = useState('');
 
   useEffect(() => {
     getPageByType('home.CitiesIndexPage').then(res => {
       if (res.data.items.length > 0) {
-        getChildren(res.data.items[0].id).then(r => setCities(r.data.items));
+        setIntro(res.data.items[0].intro || '');
+        getChildren(res.data.items[0].id, 'home.CityPage').then(r => setCities(r.data.items));
       }
     });
   }, []);
@@ -29,10 +31,14 @@ export default function CitiesPage() {
         </AnimatedSection>
 
         <AnimatedSection delay={0.1}>
-          <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-            Объекты исследования — два малых молодых города на севере Западной Сибири
-          </p>
-          <CityMap />
+          {intro ? (
+            <div className="prose-light" style={{ marginBottom: '1.5rem' }} dangerouslySetInnerHTML={{ __html: intro }} />
+          ) : (
+            <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+              Объекты исследования: два малых молодых города на севере Западной Сибири
+            </p>
+          )}
+          <CityMap cities={cities} />
         </AnimatedSection>
 
         {cities.length > 0 && (

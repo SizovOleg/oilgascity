@@ -9,6 +9,8 @@ from wagtail.images.api.fields import ImageRenditionField
 from modelcluster.fields import ParentalKey
 from rest_framework.fields import Field
 
+from .renditions import LARGE_SPEC, THUMBNAIL_SPEC
+
 
 class FrontendUrlMixin:
     """Адреса страниц ведут на маршруты React-фронтенда, а не в дерево Wagtail.
@@ -41,8 +43,8 @@ class ImageSerializedField(Field):
             'id': value.id,
             'title': value.title,
             'original': value.file.url,
-            'thumbnail': value.get_rendition('fill-400x300').url,
-            'large': value.get_rendition('width-1200').url,
+            'thumbnail': value.get_rendition(THUMBNAIL_SPEC).url,
+            'large': value.get_rendition(LARGE_SPEC).url,
         }
 
 
@@ -64,8 +66,8 @@ class GallerySerializedField(Field):
             'caption': item.caption,
             'image': {
                 'original': item.image.file.url,
-                'thumbnail': item.image.get_rendition('fill-400x300').url,
-                'large': item.image.get_rendition('width-1200').url,
+                'thumbnail': item.image.get_rendition(THUMBNAIL_SPEC).url,
+                'large': item.image.get_rendition(LARGE_SPEC).url,
             }
         } for item in value.all()]
 

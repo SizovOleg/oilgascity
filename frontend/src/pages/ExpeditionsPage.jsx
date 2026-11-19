@@ -6,11 +6,13 @@ import AnimatedSection, { StaggerContainer, StaggerItem } from '../components/An
 
 export default function ExpeditionsPage() {
   const [expeditions, setExpeditions] = useState([]);
+  const [intro, setIntro] = useState('');
 
   useEffect(() => {
     getPageByType('home.ExpeditionsIndexPage').then(res => {
       if (res.data.items.length > 0) {
-        getChildren(res.data.items[0].id).then(r => setExpeditions(r.data.items));
+        setIntro(res.data.items[0].intro || '');
+        getChildren(res.data.items[0].id, 'home.ExpeditionPage', '-date_start').then(r => setExpeditions(r.data.items));
       }
     });
   }, []);
@@ -25,6 +27,7 @@ export default function ExpeditionsPage() {
             </div>
             <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">Экспедиции</h1>
           </div>
+          {intro && <div className="prose-light mb-8" dangerouslySetInnerHTML={{ __html: intro }} />}
         </AnimatedSection>
         {expeditions.length > 0 ? (
           <StaggerContainer staggerDelay={0.15} className="space-y-6">
