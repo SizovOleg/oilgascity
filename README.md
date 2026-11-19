@@ -6,10 +6,22 @@
 
 ---
 
-## Демо
+## Адреса
 
-- **Сайт:** http://188.120.229.244/oilgascity/
-- **CMS-панель:** http://188.120.229.244/cms/
+| Что | Адрес |
+|-----|-------|
+| Сайт | https://oilgascity.ru/ |
+| Админка (Wagtail CMS) | https://oilgascity.ru/cms/ |
+| API | https://oilgascity.ru/wt-api/v2/pages/ |
+
+Ссылки «Посмотреть на сайте» в админке и поле `html_url` в API ведут на маршруты
+React (`/cities/<id>`, `/blog/<id>` и т.д.): это делает `FrontendUrlMixin` в
+`backend/home/models.py`, базовый адрес задаёт `FRONTEND_BASE_URL`.
+
+**Деплой.** Push в `main` запускает GitHub Actions (`.github/workflows/deploy.yml`):
+на сервере выполняется `deploy.sh` (git pull, collectstatic, migrate, перезапуск
+gunicorn). Фронтенд этот скрипт не пересобирает: после правок в `frontend/`
+нужен `npm run build` на сервере.
 
 ---
 
@@ -21,7 +33,7 @@ Headless CMS: Wagtail отдаёт данные через REST API, React-фр�
 ┌──────────────────────────────────────────────────┐
 │                     nginx                        │
 │                                                  │
-│  /oilgascity/*  → static files (React build)    │
+│  /*             → static files (React build)    │
 │  /wt-api/*      → gunicorn:8003 (Wagtail API)   │
 │  /cms/*         → gunicorn:8003 (Wagtail admin)  │
 │  /oilgascity-static/* → Django static files      │

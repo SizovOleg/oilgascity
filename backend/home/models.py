@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.db import models
+from django.http import HttpRequest
 from wagtail.models import Page, Orderable
 from wagtail.fields import RichTextField
 from wagtail.admin.panels import FieldPanel, MultiFieldPanel, InlinePanel
@@ -6,6 +8,29 @@ from wagtail.api import APIField
 from wagtail.images.api.fields import ImageRenditionField
 from modelcluster.fields import ParentalKey
 from rest_framework.fields import Field
+
+
+class FrontendUrlMixin:
+    """Адреса страниц ведут на маршруты React-фронтенда, а не в дерево Wagtail.
+
+    Сайт headless: Wagtail строит адрес из слагов (/города/...), а React
+    открывает страницы по своим маршрутам (/cities/<id>, см. frontend/src/App.jsx).
+    Без подмены кнопка «Посмотреть на сайте» в админке и поле html_url в API
+    ведут на несуществующие адреса. Пустой FRONTEND_BASE_URL выключает подмену.
+    """
+
+    # Маршрут страницы во фронтенде; {id} заменяется на id страницы
+    frontend_path: str | None = None
+
+    def get_url_parts(
+        self, request: HttpRequest | None = None
+    ) -> tuple[int, str | None, str | None] | None:
+        url_parts = super().get_url_parts(request=request)
+        base_url = getattr(settings, "FRONTEND_BASE_URL", "")
+        if url_parts is None or not base_url or self.frontend_path is None:
+            return url_parts
+        site_id = url_parts[0]
+        return (site_id, base_url.rstrip("/"), self.frontend_path.format(id=self.pk))
 
 
 class ImageSerializedField(Field):
@@ -79,7 +104,9 @@ class PublicationsSerializedField(Field):
 
 
 # === 1. О ПРОЕКТЕ (главная) ===
-class HomePage(Page):
+class HomePage(FrontendUrlMixin, Page):
+    frontend_path = "/"
+
     subtitle = models.CharField("Подзаголовок", max_length=500, blank=True)
     body = RichTextField("Основной текст", blank=True)
     grant_info = RichTextField("Информация о гранте", blank=True)
@@ -118,7 +145,9 @@ class HomePage(Page):
 
 
 # === 2. ГОРОДА ===
-class CitiesIndexPage(Page):
+class CitiesIndexPage(FrontendUrlMixin, Page):
+    frontend_path = "/cities"
+
     intro = RichTextField("Вводный текст", blank=True)
 
     content_panels = Page.content_panels + [
@@ -135,7 +164,9 @@ class CitiesIndexPage(Page):
     subpage_types = ['home.CityPage']
 
 
-class CityPage(Page):
+class CityPage(FrontendUrlMixin, Page):
+    frontend_path = "/cities/{id}"
+
     description = RichTextField("Описание города")
     population = models.CharField("Население", max_length=100, blank=True)
     founded = models.CharField("Год основания", max_length=50, blank=True)
@@ -191,7 +222,9 @@ class CityGalleryImage(Orderable):
 
 
 # === 3. ЭКСПЕДИЦИИ ===
-class ExpeditionsIndexPage(Page):
+class ExpeditionsIndexPage(FrontendUrlMixin, Page):
+    frontend_path = "/expeditions"
+
     intro = RichTextField("Вводный текст", blank=True)
 
     content_panels = Page.content_panels + [
@@ -208,7 +241,9 @@ class ExpeditionsIndexPage(Page):
     subpage_types = ['home.ExpeditionPage']
 
 
-class ExpeditionPage(Page):
+class ExpeditionPage(FrontendUrlMixin, Page):
+    frontend_path = "/expeditions/{id}"
+
     date_start = models.DateField("Дата начала")
     date_end = models.DateField("Дата окончания", null=True, blank=True)
     location = models.CharField("Место проведения", max_length=300)
@@ -258,7 +293,9 @@ class ExpeditionGalleryImage(Orderable):
 
 
 # === 4. ПУБЛИКАЦИИ ===
-class PublicationsPage(Page):
+class PublicationsPage(FrontendUrlMixin, Page):
+    frontend_path = "/publications"
+
     intro = RichTextField("Вводный текст", blank=True)
 
     content_panels = Page.content_panels + [
@@ -307,7 +344,9 @@ class Publication(Orderable):
 
 
 # === 5. АВТОРСКИЙ КОЛЛЕКТИВ ===
-class TeamPage(Page):
+class TeamPage(FrontendUrlMixin, Page):
+    frontend_path = "/team"
+
     intro = RichTextField("Вводный текст", blank=True)
 
     content_panels = Page.content_panels + [
@@ -361,7 +400,9 @@ class TeamMember(Orderable):
 
 
 # === 6. БЛОГ ===
-class BlogIndexPage(Page):
+class BlogIndexPage(FrontendUrlMixin, Page):
+    frontend_path = "/blog"
+
     intro = RichTextField("Вводный текст", blank=True)
 
     content_panels = Page.content_panels + [
@@ -383,7 +424,9 @@ class BlogIndexPage(Page):
         return context
 
 
-class BlogPost(Page):
+class BlogPost(FrontendUrlMixin, Page):
+    frontend_path = "/blog/{id}"
+
     date = models.DateField("Дата публикации")
     body = RichTextField("Текст")
     header_image = models.ForeignKey(
