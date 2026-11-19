@@ -9,6 +9,7 @@ import os
 from django.core.exceptions import ImproperlyConfigured
 
 from .base import *
+from .media import media_storage_from_env
 
 
 def env_list(name: str, default: str) -> list[str]:
@@ -49,6 +50,9 @@ EMAIL_BACKEND = os.environ.get(
 # (e.g. after a Wagtail upgrade).
 # See https://docs.djangoproject.com/en/6.0/ref/contrib/staticfiles/#manifeststaticfilesstorage
 STORAGES["staticfiles"]["BACKEND"] = "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
+
+# Загрузки: диск или бакет B2 по флагу MEDIA_STORAGE=s3 (settings/media.py)
+STORAGES["default"] = media_storage_from_env(os.environ)
 
 # При DEBUG=False Django по умолчанию никуда не пишет ошибки: выводим их в stderr (journald)
 LOGGING = {

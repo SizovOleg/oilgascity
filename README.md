@@ -256,7 +256,8 @@ location /oilgascity-static/ {
     expires 30d;
 }
 
-# Media
+# Media: с локального диска; после переключения на бакет B2 этот блок заменяет
+# include сниппета (см. «Хранилище медиа»)
 location /oilgascity-media/ {
     alias /opt/oilgascity-wagtail/backend/media/;
     expires 7d;
@@ -287,7 +288,7 @@ python manage.py import_wordpress
 | `/opt/oilgascity-wagtail/frontend/dist/` | Собранный фронтенд |
 | `/opt/oilgascity-wagtail/venv/` | Python виртуальное окружение |
 | `/opt/oilgascity-wagtail/backend/db.sqlite3` | **База данных** |
-| `/opt/oilgascity-wagtail/backend/media/` | **Загруженные файлы** |
+| `/opt/oilgascity-wagtail/backend/media/` | **Загруженные файлы** (при `MEDIA_STORAGE=s3` резерв, новые загрузки в бакете B2) |
 | `/opt/oilgascity-wagtail/backend/static/` | Статика Django (collectstatic) |
 
 ---
@@ -313,7 +314,8 @@ systemctl start oilgascity-backup && journalctl -u oilgascity-backup -n 20 --no-
 
 `scripts/backup.sh` по таймеру `oilgascity-backup.timer` (1-е число месяца, ночью; пропуск
 наверстывается после включения сервера) делает архив `oilgascity-ГГГГММДД-ЧЧММ.tar.gz`:
-копию SQLite (проверенную `integrity_check`) и папку `media/`. Архив кладётся в
+копию SQLite (проверенную `integrity_check`) и папку `media/` (при `MEDIA_STORAGE=s3`
+только базу: медиа уже в бакете). Архив кладётся в
 `/opt/backups/oilgascity/` и во внешнее хранилище B2 (`/mnt/b2/backups/oilgascity/`),
 хранятся последние 6. Ошибка, в том числе отсутствие B2, роняет юнит: её видно в
 `systemctl --failed`.
@@ -335,6 +337,54 @@ cp /tmp/db.sqlite3 /opt/oilgascity-wagtail/backend/db.sqlite3
 rsync -a /tmp/media/ /opt/oilgascity-wagtail/backend/media/
 systemctl start oilgascity-wagtail
 ```
+
+### Хранилище медиа (Backblaze B2)
+
+Загрузки Wagtail (оригиналы изображений, рендеры, документы) могут храниться в отдельном
+публичном бакете B2 вместо `backend/media/`. Адреса для посетителей не меняются:
+`https://oilgascity.ru/oilgascity-media/<путь>`, nginx берёт файлы из бакета и кэширует
+у себя (`/var/cache/nginx/oilgascity-media`, до 5 ГБ). Документы всегда отдаёт Django
+по `/documents/<id>/<имя>` с проверкой доступа коллекции. Дизайн и решения:
+`openspec/changes/media-external-storage/` (после архивации `openspec/specs/media-storage/`).
+
+Переменные в `/etc/oilgascity-wagtail.env`:
+
+| Переменная | Пример | Обязательна при `s3` |
+|-----------|--------|---------------------|
+| `MEDIA_STORAGE` | `s3` (без неё локальный диск) | это и есть флаг |
+| `MEDIA_S3_BUCKET` | `oilgascity-media-...` | да |
+| `MEDIA_S3_ENDPOINT_URL` | `https://s3.eu-central-003.backblazeb2.com` | да |
+| `MEDIA_S3_REGION` | `eu-central-003` | да |
+| `MEDIA_S3_ACCESS_KEY_ID` | keyID ключа приложения | да |
+| `MEDIA_S3_SECRET_ACCESS_KEY` | applicationKey | да |
+| `MEDIA_S3_LOCATION` | префикс внутри бакета, по умолчанию пусто | нет |
+| `MEDIA_PUBLIC_DOMAIN` | `oilgascity.ru/oilgascity-media` | нет |
+
+Ключи без флага ничего не меняют. С флагом, но без обязательной переменной gunicorn не
+стартует и называет, чего не хватает.
+
+Переключение (по шагам, с проверкой после каждого):
+
+```bash
+cd /opt/oilgascity-wagtail
+bash scripts/migrate-media-to-b2.sh            # 1. диск -> бакет, сверка размеров и хэшей
+echo "MEDIA_STORAGE=s3" >> /etc/oilgascity-wagtail.env
+systemctl restart oilgascity-wagtail           # 2. новые загрузки и рендеры идут в бакет
+bash scripts/migrate-media-to-b2.sh            # 3. дослать то, что успело лечь на диск
+bash scripts/nginx/install-media-proxy.sh      # 4. nginx: /oilgascity-media/ из бакета, с кэшем
+curl -sI https://oilgascity.ru/oilgascity-media/<путь> | grep -i x-cache-status   # MISS, затем HIT
+```
+
+Откат:
+
+```bash
+bash scripts/migrate-media-to-b2.sh --reverse  # загрузки, сделанные после переключения, на диск
+sed -i '/^MEDIA_STORAGE=/d' /etc/oilgascity-wagtail.env && systemctl restart oilgascity-wagtail
+bash scripts/nginx/install-media-proxy.sh --uninstall
+```
+
+Ключ приложения в B2 выдаётся только к этому бакету (Read and Write); ключ rclone-монтирования
+`/mnt/b2` (бакет `EOdata`) для медиа не используется.
 
 ---
 

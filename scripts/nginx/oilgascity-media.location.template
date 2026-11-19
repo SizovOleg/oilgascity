@@ -1,0 +1,46 @@
+# Шаблон: install-media-proxy.sh подставляет @S3_HOST@ и @BUCKET@ из /etc/oilgascity-wagtail.env
+# и кладёт результат в /etc/nginx/snippets/oilgascity-media.conf (подключается в server {}).
+# Файлы берутся из публичного бакета B2 и кэшируются на сервере; адреса для посетителей
+# остаются https://oilgascity.ru/oilgascity-media/<ключ>.
+location /oilgascity-media/ {
+    limit_except GET { deny all; }
+
+    # Переменная в proxy_pass заставляет nginx заново разрешать имя хранилища (смена IP у B2)
+    resolver 46.38.252.230 46.38.225.230 valid=300s ipv6=off;
+    resolver_timeout 5s;
+    set $oilgascity_media_host @S3_HOST@;
+    proxy_pass https://$oilgascity_media_host/@BUCKET@/$oilgascity_media_key;
+
+    proxy_set_header Host @S3_HOST@;
+    proxy_set_header Authorization "";
+    proxy_set_header Cookie "";
+    proxy_set_header Connection "";
+    proxy_http_version 1.1;
+    proxy_ssl_server_name on;
+    proxy_ssl_name @S3_HOST@;
+    proxy_ssl_verify on;
+    proxy_ssl_verify_depth 3;
+    proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+
+    # Служебные заголовки хранилища посетителю не нужны
+    proxy_hide_header x-amz-request-id;
+    proxy_hide_header x-amz-id-2;
+    proxy_hide_header x-bz-content-sha1;
+    proxy_hide_header x-bz-file-id;
+    proxy_hide_header x-bz-file-name;
+    proxy_hide_header x-bz-upload-timestamp;
+    proxy_hide_header Set-Cookie;
+    proxy_ignore_headers Set-Cookie Expires Cache-Control;
+
+    # Wagtail не перезаписывает файлы (новое имя на каждую загрузку), долгий кэш безопасен
+    proxy_cache oilgascity_media;
+    proxy_cache_key $oilgascity_media_key;
+    proxy_cache_valid 200 30d;
+    proxy_cache_valid 403 404 1m;
+    proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+    proxy_cache_background_update on;
+    proxy_cache_lock on;
+    add_header X-Cache-Status $upstream_cache_status always;
+
+    expires 7d;
+}

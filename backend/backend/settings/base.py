@@ -188,5 +188,9 @@ WAGTAILADMIN_BASE_URL = os.environ.get("WAGTAILADMIN_BASE_URL", "https://oilgasc
 # see https://docs.wagtail.org/en/stable/advanced_topics/deploying.html#user-uploaded-files
 WAGTAILDOCS_EXTENSIONS = ['csv', 'docx', 'key', 'odt', 'pdf', 'pptx', 'rtf', 'txt', 'xlsx', 'zip']
 
+# Документы отдаёт Django по /documents/<id>/<имя> с проверкой доступа коллекции,
+# при любом хранилище (с бакетом Wagtail иначе выдал бы прямую ссылку на файл)
+WAGTAILDOCS_SERVE_METHOD = "serve_view"
+
 # API только на чтение и без cookies (CORS_ALLOW_CREDENTIALS выключен), поэтому открыт для любых сайтов
 CORS_ALLOW_ALL_ORIGINS = True

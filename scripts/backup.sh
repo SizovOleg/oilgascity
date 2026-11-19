@@ -1,11 +1,13 @@
 #!/bin/bash
 # Ежемесячный бэкап oilgascity: копия SQLite (с проверкой целостности) и media.
+# При MEDIA_STORAGE=s3 медиа уже лежат в бакете B2, в архив идёт только база.
 # Архив кладётся локально и во внешнее хранилище B2 (rclone-монтирование /mnt/b2).
 # Запуск: таймер oilgascity-backup.timer; вручную: systemctl start oilgascity-backup
 # Восстановление: см. README, раздел «Бэкапы».
 set -euo pipefail
 
-APP=/opt/oilgascity-wagtail
+APP=${APP:-/opt/oilgascity-wagtail}
+ENV_FILE=${ENV_FILE:-/etc/oilgascity-wagtail.env}
 LOCAL_DIR=${BACKUP_LOCAL_DIR:-/opt/backups/oilgascity}
 B2_MOUNT=${BACKUP_B2_MOUNT:-/mnt/b2}
 REMOTE_DIR=${BACKUP_REMOTE_DIR:-$B2_MOUNT/backups/oilgascity}
@@ -45,8 +47,19 @@ if result != "ok":
     sys.exit(f"integrity_check копии базы: {result}")
 PY
 
-log "Архив базы и media"
-tar -czf "$WORK/$NAME" -C "$WORK" db.sqlite3 -C "$APP/backend" media
+# Из файла окружения нужен только флаг хранилища, секреты в этот процесс не читаются
+# (нет файла: хранилище считается локальным, медиа попадают в архив)
+MEDIA_STORAGE=""
+if [ -r "$ENV_FILE" ]; then
+    MEDIA_STORAGE=$(sed -n 's/^MEDIA_STORAGE=//p' "$ENV_FILE" | tail -1 | tr -d '"'"'"' ' | tr 'A-Z' 'a-z')
+fi
+if [ "$MEDIA_STORAGE" = "s3" ]; then
+    log "Архив базы (медиа хранятся в бакете B2, MEDIA_STORAGE=s3)"
+    tar -czf "$WORK/$NAME" -C "$WORK" db.sqlite3
+else
+    log "Архив базы и media"
+    tar -czf "$WORK/$NAME" -C "$WORK" db.sqlite3 -C "$APP/backend" media
+fi
 tar -tzf "$WORK/$NAME" > /dev/null
 mv "$WORK/$NAME" "$LOCAL_DIR/$NAME"
 log "Локально: $LOCAL_DIR/$NAME ($(du -h "$LOCAL_DIR/$NAME" | cut -f1))"
