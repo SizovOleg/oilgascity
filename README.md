@@ -386,6 +386,14 @@ bash scripts/nginx/install-media-proxy.sh --uninstall
 Ключ приложения в B2 выдаётся только к этому бакету (Read and Write); ключ rclone-монтирования
 `/mnt/b2` (бакет `EOdata`) для медиа не используется.
 
+Включено на проде 2026-11-19: бакет `oilgascity-media`, `MEDIA_STORAGE=s3`. Удалённый в
+админке файл ещё до 30 дней может отдаваться из кэша nginx по старому адресу; если его
+нужно убрать сразу, сбросить кэш:
+
+```bash
+find /var/cache/nginx/oilgascity-media -type f -delete
+```
+
 ---
 
 ## Разработка (dev-режим)
