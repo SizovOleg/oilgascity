@@ -44,6 +44,12 @@ MUR_PLAY = DISK / "РНФ 2025_2026 Города" / "Муравленко_Фот
 MUR_PLAY_XLSX = MUR_PLAY / "Детские площадки_Муравленко.xlsx"
 MUR_PARKS = DISK / "РНФ 2025_2026 Города_фото" / "2025 Муравленко" / "Парки, скверы"
 GPX_DIR = Path(os.environ.get("OGC_GPX_DIR", "data/gpx"))
+KOG_POINTS = LAYERS / "Когалым" / "Точки описаний"
+MUR_VEG = DISK / "РНФ 2025_2026 Города" / "Муравленко_Фото 2025" / "Муравленко_растительность_2025"
+MUR_VEG_XLSX = MUR_VEG / "Геоботаническое описание_Муравленко.xlsx"
+MUR_ECO = DISK / "РНФ 2025_2026 Города" / "Муравленко_Фото 2025" / "Муравленко_экологическая напряженность_2025"
+MUR_ECO_XLSX = MUR_ECO / "Точки экологической напряженности_Муравленко.xlsx"
+KIND_VEG, KIND_ECO = "геоботаническое описание", "точка экологической напряжённости"
 UTM = "EPSG:32643"
 URL_BASE = "/oilgascity-media/geoportal/photos"
 
@@ -139,6 +145,113 @@ def muravlenko_groups() -> tuple[dict[str, dict], gpd.GeoDataFrame]:
     return groups, sp
 
 
+# ------------------------------------------------------------------ точки полевых описаний
+
+def kogalym_point_groups() -> dict[str, dict]:
+    """Папки «КЭ_08,09,10 1572», «КВ_21 t14» -> точки КЭ_n и КВ_n слоя «Точки описаний» (ключ ke8, kv21)."""
+    known = {"КЭ": set(gpd.read_file(KOG_POINTS / "Ecological_Kogalym.shp")["id"].astype(int)),
+             "КВ": set(gpd.read_file(KOG_POINTS / "Vegetation_points.shp")["id"].astype(int))}
+    groups: dict[str, dict] = {}
+    for folder in sorted(p for p in KOG_PHOTOS.iterdir() if p.is_dir()):
+        for code, nums in re.findall(r"(КЭ|КВ)_([\d,]+)", folder.name):
+            for n in (int(x) for x in nums.split(",") if x.strip().isdigit()):
+                if n not in known[code]:
+                    print(f"  папка {folder.name}: точки {code}_{n} нет в слое")
+                    continue
+                kind = KIND_ECO if code == "КЭ" else KIND_VEG
+                g = groups.setdefault(("ke" if code == "КЭ" else "kv") + str(n),
+                                      {"title": f"{kind.capitalize()} {code}_{n}", "folders": [], "date": "июль 2026"})
+                g["folders"].append(folder)
+    return groups
+
+
+def dms_pair(text: str) -> tuple[float | None, float | None]:
+    """Широта и долгота из записи таблицы: «N 63°48‘04,8" E 74°32‘30,3"» или «74°31'30,719"E 63°48'13,302"N».
+    Ось определяется по значению: в районе работ широта около 63-64°, долгота около 74-75°."""
+    lat = lon = None
+    for d, m, s in re.findall(r"(\d+)°\s*(\d+)\s*[‘'’′]\s*(\d+(?:[.,]\d+)?)", text):
+        v = int(d) + int(m) / 60 + float(s.replace(",", ".")) / 3600
+        if v < 70:
+            lat = v
+        else:
+            lon = v
+    return lat, lon
+
+
+def muravlenko_veg_table() -> dict[int, dict]:
+    """Номер в полевом дневнике -> номер на карте, координаты, виды по ярусам (строки без номера относятся к описанию выше)."""
+    out: dict[int, dict] = {}
+    cur = None
+    wb = openpyxl.load_workbook(MUR_VEG_XLSX, read_only=True, data_only=True)
+    for r in wb.worksheets[0].iter_rows(values_only=True):
+        mapno = str(r[1]).strip() if r and len(r) > 5 and r[1] is not None else ""
+        if mapno.isdigit():
+            diary = int(re.match(r"\d+", str(r[2]).strip()).group())
+            lat, lon = dms_pair(str(r[3] or ""))
+            cur = out[diary] = {"map": int(mapno), "lat": lat, "lon": lon, "tiers": {}}
+        if cur is not None and r and len(r) > 5 and r[5]:
+            tier = str(r[4] or "").strip() or (list(cur["tiers"])[-1] if cur["tiers"] else "")
+            cur["tiers"].setdefault(tier, []).append(str(r[5]).strip())
+    return out
+
+
+def veg_note(rec: dict) -> str:
+    # вид может повторяться в ярусе (древостой и подрост в таблице отдельными строками): в подписи один раз
+    parts = [f"{tier}{' ярус' if tier.lower().startswith('древесн') else ''}: {', '.join(dict.fromkeys(sp))}"
+             for tier, sp in rec["tiers"].items() if tier]
+    return ". ".join(parts) + ("." if parts else "")
+
+
+def muravlenko_eco_table() -> dict[str, tuple[str, str]]:
+    """Путевая точка навигатора -> (номер на карте, характеристика)."""
+    out = {}
+    wb = openpyxl.load_workbook(MUR_ECO_XLSX, read_only=True, data_only=True)
+    for r in wb.worksheets[0].iter_rows(values_only=True):
+        if r and len(r) > 3 and r[1] is not None and str(r[1]).strip()[:1].isdigit():
+            for wp in re.findall(r"\d{4}", str(r[2] or ""))[:1]:
+                out[wp] = (str(r[1]).strip(), " ".join(str(r[3] or "").split()))
+    return out
+
+
+def muravlenko_point_groups() -> tuple[dict[str, dict], dict]:
+    """Папки геоботаники «A (B)» (A номер на карте, B номер в дневнике) и напряжённости «N (WP)».
+    Возвращает группы фото и слой точек (GeoJSON, WGS 84) для геопортала: в слоях города таких точек нет."""
+    veg, eco, wpts = muravlenko_veg_table(), muravlenko_eco_table(), gpx_points()
+    groups: dict[str, dict] = {}
+    feats: dict[str, dict] = {}
+    for diary, rec in sorted(veg.items()):
+        if rec["lat"] is None or rec["lon"] is None:
+            print(f"  описание {diary}: координаты не разобраны")
+            continue
+        feats[f"mv{diary}"] = {"type": "Feature", "geometry": {"type": "Point", "coordinates": [round(rec["lon"], 6), round(rec["lat"], 6)]},
+                               "properties": {"name": f"Геоботаническое описание № {diary}", "kind": KIND_VEG,
+                                              "note": veg_note(rec), "fid": f"mv{diary}"}}
+    for folder in sorted(p for p in MUR_VEG.iterdir() if p.is_dir()):
+        m = re.match(r"(\d+)\s*\((\d+)\)", folder.name)
+        fid = f"mv{m.group(2)}" if m else None
+        if fid not in feats:
+            print(f"  папка геоботаники {folder.name}: описания нет в таблице, пропуск")
+            continue
+        p = feats[fid]["properties"]
+        groups.setdefault(fid, {"title": p["name"], "folders": [], "date": "июль 2025", "note": p["note"]})["folders"].append(folder)
+    for folder in sorted(p for p in MUR_ECO.iterdir() if p.is_dir()):
+        wps = re.findall(r"\d{4}", folder.name)
+        if not wps or wps[0] not in wpts:
+            print(f"  папка напряжённости {folder.name}: нет путевой точки, пропуск")
+            continue
+        wp = wps[0]
+        mapno, text = eco.get(wp, ("", ""))
+        fid = f"me{wp}"
+        if fid not in feats:
+            pt = wpts[wp]
+            feats[fid] = {"type": "Feature", "geometry": {"type": "Point", "coordinates": [round(pt.x, 6), round(pt.y, 6)]},
+                          "properties": {"name": f"Точка экологической напряжённости{f' № {mapno}' if mapno else ''}",
+                                         "kind": KIND_ECO, "note": text, "fid": fid}}
+        p = feats[fid]["properties"]
+        groups.setdefault(fid, {"title": p["name"], "folders": [], "date": "июль 2025", "note": p["note"]})["folders"].append(folder)
+    return groups, {"type": "FeatureCollection", "features": list(feats.values())}
+
+
 # ------------------------------------------------------------------ детектор людей
 
 class PersonDetector:
@@ -207,19 +320,25 @@ def process(city: str, groups: dict[str, dict], det: PersonDetector, out: Path, 
 def main(out: Path) -> None:
     # сначала сопоставление обоих городов: ошибка в исходниках видна до долгой обработки снимков
     kog = kogalym_groups()
-    print(f"Когалым: {len(kog)} объектов с папками")
+    kog_pts = kogalym_point_groups()
+    print(f"Когалым: {len(kog)} объектов и {len(kog_pts)} точек описаний с папками")
+    kog.update(kog_pts)
     mur, _ = muravlenko_groups()
-    print(f"Муравленко: {len(mur)} объектов с папками")
+    mur_pts, mur_layer = muravlenko_point_groups()
+    print(f"Муравленко: {len(mur)} объектов и {len(mur_pts)} точек описаний с папками, в слое точек {len(mur_layer['features'])}")
+    mur.update(mur_pts)
     det = PersonDetector()
     excluded: list = []
     result = {"kogalym": process("kogalym", kog, det, out, excluded),
-              "muravlenko": process("muravlenko", mur, det, out, excluded)}
+              "muravlenko": process("muravlenko", mur, det, out, excluded),
+              # слой точек описаний Муравленко (в слоях города его нет): build_geodata.py кладёт его в геопортал
+              "_points": {"muravlenko": mur_layer}}
     (out / "photos-index.json").write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
     with open(out / "excluded.csv", "w", newline="", encoding="utf-8-sig") as fh:
         w = csv.writer(fh)
         w.writerow(["город", "объект", "файл", "рост человека, доля кадра"])
         w.writerows(excluded)
-    n = sum(len(g["items"]) for c in result.values() for g in c.values())
+    n = sum(len(g["items"]) for city, c in result.items() if not city.startswith("_") for g in c.values())
     print(f"ГОТОВО: {n} снимков, отсеяно с людьми: {len(excluded)}")
 
 

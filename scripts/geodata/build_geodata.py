@@ -206,6 +206,23 @@ def write_open_spaces(open_sp: gpd.GeoDataFrame, d: Path, photos: dict) -> None:
         print(f"  photos.json: {len(photos)} объектов, {sum(len(g['items']) for g in photos.values())} снимков")
 
 
+def write_field_points(pts: gpd.GeoDataFrame, d: Path, photos: dict) -> None:
+    """Точки полевых описаний с числом фото у точки (ключ fid как в scripts/geodata/photos.py)."""
+    pts = pts.copy()
+    pts["photos"] = pts["fid"].map(lambda f: len(photos.get(f, {}).get("items", [])) if f else 0)
+    if "note" not in pts:
+        pts["note"] = None
+    to_geojson(pts, d / "field_points.json", ["name", "kind", "note", "fid", "photos"], 0)
+    print(f"  field_points.json: {len(pts)} точек, с фото {int((pts['photos'] > 0).sum())}")
+
+
+FIELD_POINTS_STYLE = {
+    "color": ["match", ["get", "kind"], "геоботаническое описание", "#2F5D3A", "#C2410C"],
+    "legend": [{"label": "Геоботаническое описание", "color": "#2F5D3A"},
+               {"label": "Точка экологической напряжённости", "color": "#C2410C"}],
+}
+
+
 def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: Path | None = None,
           imagery_index: Path | None = None) -> None:
     photos = json.loads(photos_index.read_text(encoding="utf-8")) if photos_index else {}
@@ -231,6 +248,12 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
                       else (f"m{int(o)}" if pd.notna(o) else None)
                       for n, g, o in zip(open_sp["Name_1"], open_sp["group"], open_sp["OBJECTID_1"])]
     write_open_spaces(open_sp, d, photos.get("muravlenko", {}))
+    # точки геоботаники и экологической напряжённости 2025 года: в слоях города их нет, слой собирает photos.py
+    # из таблиц полевых описаний и путевых точек навигатора
+    mur_pts_fc = photos.get("_points", {}).get("muravlenko")
+    if mur_pts_fc and mur_pts_fc["features"]:
+        mur_pts = gpd.GeoDataFrame.from_features(mur_pts_fc["features"], crs="EPSG:4326").to_crs(UTM)
+        write_field_points(mur_pts, d, photos.get("muravlenko", {}))
     buildings = read(src, "Муравленко/Вектор_итог/M_Buildings.shp")
     buildings["address"] = buildings["Street"].fillna("") + " " + buildings["House"].fillna("").astype(str)
     to_geojson(buildings.rename(columns={"floor": "floors", "apartment": "apartments", "Condition": "condition", "Type": "type"}),
@@ -276,6 +299,11 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
                 layer("access_green", "400 м пешком от парков и скверов", "fill", "#2F7D3A", opacity=0.18,
                       note="Буфер построен для геопортала по методике статьи"),
             ]},
+            *([{"title": "Полевые работы 2025", "note": "Точки из полевых дневников и навигатора, июль 2025", "layers": [
+                layer("field_points", "Точки описаний", "circle", FIELD_POINTS_STYLE["color"],
+                      legend=FIELD_POINTS_STYLE["legend"], popup=["name", "kind", "note"], default=True,
+                      note="У точек с фото по щелчку внизу карты открывается лента снимков"),
+            ]}] if (d / "field_points.json").exists() else []),
             {"title": "Застройка и зонирование", "note": "Данные проекта", "layers": [
                 layer("buildings", "Жилые дома", "fill", "#8C6F6A", popup=["address", "floors", "apartments", "year", "condition", "type"]),
                 layer("zones", "Функциональные зоны", "fill", match_expr("zone", ZONES),
@@ -313,10 +341,14 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
     surface = read(src, "Когалым/Классификация/Kogalym_map_v3_clip.shp")
     to_geojson(with_names(dissolve(surface, "Predicted_", 30, 2.0).rename(columns={"Predicted_": "cls"})), d / "surface.json", ["cls", "name", "area_ha"], 0)
     to_geojson(buffer_union(green, 400), d / "access_green.json", ["label"], 1.0)
+    # поле Name в этих шейпах обрезано до 4 символов («КЭ_1» вместо «КЭ_12»), имя собирается из id
     vp = read(src, "Когалым/Точки описаний/Vegetation_points.shp").assign(kind="геоботаническое описание")
     ep = read(src, "Когалым/Точки описаний/Ecological_Kogalym.shp").assign(kind="точка экологической напряжённости")
-    pts = gpd.GeoDataFrame(gpd.pd.concat([vp[["Name", "kind", "geometry"]], ep[["Name", "kind", "geometry"]]], ignore_index=True), crs=UTM)
-    to_geojson(pts.rename(columns={"Name": "name"}), d / "field_points.json", ["name", "kind"], 0)
+    vp["name"], vp["fid"] = "КВ_" + vp["id"].astype(int).astype(str), "kv" + vp["id"].astype(int).astype(str)
+    ep["name"], ep["fid"] = "КЭ_" + ep["id"].astype(int).astype(str), "ke" + ep["id"].astype(int).astype(str)
+    cols = ["name", "kind", "fid", "geometry"]
+    pts = gpd.GeoDataFrame(gpd.pd.concat([vp[cols], ep[cols]], ignore_index=True), crs=UTM)
+    write_field_points(pts, d, photos.get("kogalym", {}))
     ndvi_corners = ndvi_png(src / "Когалым/NDVI/NDVI_Clip.tif", d / "ndvi.png")
 
     kog_classes = sorted(surface["Predicted_"].dropna().unique(), key=list(SURFACE).index)
@@ -347,10 +379,9 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
                       note="Буфер построен для геопортала по методике статьи"),
             ]},
             {"title": "Полевые работы 2026", "note": "Точки привязаны по GPS", "layers": [
-                layer("field_points", "Точки описаний", "circle",
-                      ["match", ["get", "kind"], "геоботаническое описание", "#2F5D3A", "#C2410C"],
-                      legend=[{"label": "Геоботаническое описание", "color": "#2F5D3A"}, {"label": "Точка экологической напряжённости", "color": "#C2410C"}],
-                      popup=["name", "kind"], default=True),
+                layer("field_points", "Точки описаний", "circle", FIELD_POINTS_STYLE["color"],
+                      legend=FIELD_POINTS_STYLE["legend"], popup=["name", "kind"], default=True,
+                      note="У точек с фото по щелчку внизу карты открывается лента снимков"),
             ]},
             {"title": "Застройка", "note": "Жилые дома с оценкой числа жителей", "layers": [
                 layer("buildings", "Жилые дома", "fill", "#8C6F6A", popup=["address", "floors", "apartments", "people", "year", "condition", "type"]),

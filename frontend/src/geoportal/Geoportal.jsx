@@ -40,7 +40,7 @@ const FIELD_LABELS = {
   kind: 'Тип', area_ha: 'Площадь, га', address: 'Адрес', floors: 'Этажей', apartments: 'Квартир',
   year: 'Год постройки', condition: 'Состояние', type: 'Тип дома', people: 'Жителей (оценка)',
   formation: 'Формация', community: 'Сообщество', zone: 'Зона', area: 'Жилая площадь, м²',
-  house_type: 'Тип', source: 'Контур',
+  house_type: 'Тип', source: 'Контур', note: 'Описание',
 };
 
 // Что показывает синтез: подсказка под кнопками выбора
@@ -319,6 +319,7 @@ export default function Geoportal() {
   });
   const mapRef = useRef(null);
   const boxRef = useRef(null);
+  const cycleRef = useRef({ key: '', i: 0 }); // перебор совпадающих объектов повторным щелчком
   const citySlug = params.get('city') || 'muravlenko';
   const city = useMemo(() => manifest?.cities.find((c) => c.slug === citySlug) || manifest?.cities[0], [manifest, citySlug]);
   const tabs = city ? tabsOf(city) : [];
@@ -441,14 +442,31 @@ export default function Geoportal() {
     });
     const present = () => ids.filter((id) => map.getLayer(id) && map.getLayoutProperty(id, 'visibility') !== 'none');
     const onClick = (e) => {
-      const hits = map.queryRenderedFeatures(e.point, { layers: present() });
-      if (!hits.length) return;
-      const hit = hits[0];
+      const all = map.queryRenderedFeatures(e.point, { layers: present() });
+      if (!all.length) return;
+      // совпадающие точки одного слоя (например, описание и точка напряжённости на одной GPS-точке):
+      // повторный щелчок по тому же месту показывает следующую
+      const seen = new Set();
+      const hits = all.filter((h) => {
+        const k = `${h.layer.id}:${h.properties.fid || h.properties.name || h.id}`;
+        if (h.layer.id !== all[0].layer.id || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      const key = hits.map((h) => h.properties.fid || h.properties.name).join('|');
+      const i = cycleRef.current.key === key ? (cycleRef.current.i + 1) % hits.length : 0;
+      cycleRef.current = { key, i };
+      const hit = hits[i];
       const layer = layers.find((l) => hit.layer.id === layerKey(city.slug, l.id) || hit.layer.id === `${layerKey(city.slug, l.id)}-fill`);
-      new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(e.lngLat).setHTML(popupHtml(layer, hit.properties)).addTo(map);
+      const more = hits.length > 1
+        ? `<div class="gp-pop-more">${i + 1} из ${hits.length} в этом месте: щёлкните ещё раз, чтобы показать следующий</div>` : '';
+      new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(e.lngLat).setHTML(popupHtml(layer, hit.properties) + more).addTo(map);
       // у площадки или парка с фото внизу открывается лента миниатюр
       const g = hit.properties.fid && photos[city.slug]?.[hit.properties.fid];
-      setGallery(g ? { ...g, title: hit.properties.name && hit.properties.name !== 'Площадка' && hit.properties.name !== 'Спорт' ? hit.properties.name : g.title } : null);
+      // своё название объекта лучше общего заголовка, кроме заглушек («Площадка») и кодов точек (КЭ_12)
+      const own = hit.properties.name;
+      const generic = !own || own === 'Площадка' || own === 'Спорт' || /^К[ЭВ]_\d+$/.test(own);
+      setGallery(g ? { ...g, title: generic ? g.title : own } : null);
     };
     const onMove = (e) => {
       const n = map.queryRenderedFeatures(e.point, { layers: present() }).length;
