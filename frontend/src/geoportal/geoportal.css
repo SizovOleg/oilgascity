@@ -1,0 +1,44 @@
+/* Геопортал: полноэкранная карта с панелью слоёв. Палитра и шрифты общие с сайтом (site.css). */
+.gp { position: fixed; inset: 0; display: flex; flex-direction: column; background: var(--snow); }
+.gp-bar { display: flex; align-items: center; gap: 1rem; padding: 0.55rem 1rem; border-bottom: 1px solid var(--line); background: var(--snow); z-index: 2; }
+.gp-back { font-weight: 800; font-size: 1.05rem; letter-spacing: -0.03em; text-decoration: none; line-height: 1; }
+.gp-back span { display: block; font-weight: 400; font-size: 0.72rem; letter-spacing: 0; color: var(--mute); margin-top: 0.2rem; }
+.gp-bar h1 { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 1.15rem; letter-spacing: -0.02em; padding-left: 1rem; border-left: 1px solid var(--line); }
+.gp-bar h1 svg { width: 1.1rem; height: 1.1rem; color: var(--tape); }
+.gp-cities { display: flex; gap: 0.35rem; margin-left: auto; }
+.gp-cities button, .gp-base button, .gp-toggle { font: inherit; font-size: 0.84rem; font-weight: 700; line-height: 1; padding: 0.55rem 0.9rem; border-radius: 999px; border: 2px solid var(--ink); background: #fff; color: var(--ink); cursor: pointer; }
+.gp-cities button[aria-pressed="true"], .gp-base button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.gp-toggle { display: none; }
+.gp-body { flex: 1; display: flex; min-height: 0; }
+.gp-panel { width: 21rem; flex: none; overflow-y: auto; border-right: 1px solid var(--line); padding: 1rem 1.1rem 1.4rem; font-size: 0.875rem; background: var(--snow); }
+.gp-city h2 { font-size: 1.75rem; }
+.gp-region { color: var(--mute); margin: 0.25rem 0 0.5rem; }
+.gp-about { margin-bottom: 0.9rem; }
+.gp-base { display: flex; gap: 0.35rem; padding-bottom: 0.9rem; border-bottom: 2px solid var(--ink); }
+.gp-group { padding: 0.8rem 0; border-bottom: 1px solid var(--line); }
+.gp-group h3 { font-size: 1rem; letter-spacing: -0.01em; }
+.gp-note { color: var(--mute); font-size: 0.75rem; margin: 0.2rem 0 0.4rem; }
+.gp-layer { padding: 0.3rem 0; }
+.gp-layer label { display: flex; gap: 0.5rem; align-items: flex-start; cursor: pointer; line-height: 1.35; }
+.gp-layer input { margin-top: 0.15rem; accent-color: var(--tape); width: 1rem; height: 1rem; flex: none; }
+.gp-legend { list-style: none; margin: 0.35rem 0 0.2rem 1.5rem; padding: 0; display: grid; gap: 0.2rem; font-size: 0.78rem; }
+.gp-legend i { display: inline-block; width: 0.9rem; height: 0.9rem; margin-right: 0.45rem; vertical-align: -0.15rem; border: 1px solid rgba(0, 0, 0, 0.15); }
+.gp-source { font-size: 0.75rem; color: var(--mute); margin-top: 1rem; }
+.gp-source a { color: var(--ink); }
+.gp-map { flex: 1; position: relative; min-width: 0; }
+.gp-error { position: absolute; top: 1rem; left: 1rem; right: 1rem; background: #fff; padding: 1rem; border-left: 4px solid var(--tape); z-index: 2; }
+.gp-pop { font-family: var(--sans); font-size: 0.82rem; line-height: 1.4; }
+.gp-pop b { display: block; font-size: 0.95rem; margin-bottom: 0.25rem; }
+.gp-pop span { color: var(--mute); }
+.gp-pop small { display: block; color: var(--mute); margin-top: 0.35rem; font-size: 0.72rem; }
+.maplibregl-ctrl-attrib { font-size: 0.7rem; }
+
+@media (max-width: 760px) {
+  .gp-bar { flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem 0.8rem; }
+  .gp-bar h1 { display: none; }
+  .gp-cities { order: 3; width: 100%; margin: 0; }
+  .gp-cities button { flex: 1; }
+  .gp-toggle { display: block; margin-left: auto; }
+  .gp-body { flex-direction: column-reverse; }
+  .gp-panel { width: auto; max-height: 48vh; border-right: 0; border-top: 2px solid var(--ink); }
+}

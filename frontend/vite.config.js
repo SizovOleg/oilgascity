@@ -15,7 +15,7 @@ export default defineConfig({
     proxy: {
       '/wt-api': { target: api, changeOrigin: true, secure: true },
       '/oilgascity-media': { target: media, changeOrigin: true, secure: true },
-      '/geodata': { target: media, changeOrigin: true, secure: true },
+      // /geodata в dev берётся из public/geodata (собирается scripts/geodata/build_geodata.py, в git не хранится)
     },
   },
   build: {

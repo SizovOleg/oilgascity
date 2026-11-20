@@ -1,11 +1,281 @@
-// Временная заглушка: полноценный геопортал собирается в изменении geoportal-prototype
-import { Link } from 'react-router-dom';
+// Геопортал: полноэкранная карта MapLibre со слоями по картам статей проекта.
+// Состав слоёв, стили и легенды приходят из /geodata/manifest.json (scripts/geodata/build_geodata.py),
+// поэтому новый слой добавляется без правки этого кода.
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import * as maplibregl from 'maplibre-gl';
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import './geoportal.css';
+import { PinIcon } from '../components/Icons';
+
+// maplibre-gl 6 ищет воркер рядом со своим модулем; после сборки Vite его там нет, задаём адрес явно
+maplibregl.setWorkerUrl(workerUrl);
+
+const DATA = '/geodata';
+const GLYPHS = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
+
+const BASEMAPS = {
+  scheme: { title: 'Схема', style: 'https://tiles.openfreemap.org/styles/positron' },
+  satellite: {
+    title: 'Снимок',
+    style: {
+      version: 8,
+      glyphs: GLYPHS,
+      sources: {
+        esri: {
+          type: 'raster',
+          tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+          tileSize: 256,
+          maxzoom: 19,
+          attribution: 'Снимки © Esri, Maxar, Earthstar Geographics',
+        },
+      },
+      layers: [{ id: 'esri', type: 'raster', source: 'esri' }],
+    },
+  },
+};
+
+const FIELD_LABELS = {
+  kind: 'Тип', area_ha: 'Площадь, га', address: 'Адрес', floors: 'Этажей', apartments: 'Квартир',
+  year: 'Год постройки', condition: 'Состояние', type: 'Тип дома', people: 'Жителей (оценка)',
+  formation: 'Формация', community: 'Сообщество', zone: 'Зона',
+};
+
+const layerKey = (city, id) => `${city}-${id}`;
+
+function popupHtml(layer, props) {
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const rows = (layer.popup || []).filter((f) => props[f] !== null && props[f] !== undefined && props[f] !== '' && props[f] !== 'None');
+  const title = rows.find((f) => f === 'name' || f === 'address' || f === 'formation');
+  const body = rows.filter((f) => f !== title)
+    .map((f) => `<div><span>${FIELD_LABELS[f] || f}</span> ${esc(props[f])}</div>`).join('');
+  return `<div class="gp-pop"><b>${esc(title ? props[title] : layer.title)}</b>${body}<small>${esc(layer.title)}</small></div>`;
+}
+
+// Слои MapLibre для одного слоя манифеста
+function styleLayers(city, layer) {
+  const id = layerKey(city, layer.id);
+  const src = id;
+  const color = layer.color;
+  if (layer.type === 'image') return [{ id, type: 'raster', source: src, paint: { 'raster-opacity': layer.opacity ?? 0.85 } }];
+  if (layer.type === 'line') {
+    return [{ id, type: 'line', source: src, paint: { 'line-color': color, 'line-width': layer.width || 1.5 } }];
+  }
+  if (layer.type === 'circle') {
+    const out = [{ id, type: 'circle', source: src, paint: { 'circle-color': color, 'circle-radius': 5, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } }];
+    if (layer.label) out.push(labelLayer(id, src, layer.label));
+    return out;
+  }
+  if (layer.type === 'fill-outline') {
+    const out = [
+      { id: `${id}-fill`, type: 'fill', source: src, paint: { 'fill-color': color, 'fill-opacity': 0.04 } },
+      { id, type: 'line', source: src, paint: { 'line-color': color, 'line-width': 1.2, 'line-dasharray': [3, 2] } },
+    ];
+    if (layer.label) out.push(labelLayer(id, src, layer.label));
+    return out;
+  }
+  return [
+    { id: `${id}-fill`, type: 'fill', source: src, paint: { 'fill-color': color, 'fill-opacity': layer.opacity ?? 0.7 } },
+    { id, type: 'line', source: src, paint: { 'line-color': color, 'line-width': 0.6, 'line-opacity': 0.9 } },
+  ];
+}
+
+function labelLayer(id, src, field) {
+  return {
+    id: `${id}-label`, type: 'symbol', source: src,
+    layout: { 'text-field': ['get', field], 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-offset': [0, 1], 'text-anchor': 'top' },
+    paint: { 'text-color': '#14242B', 'text-halo-color': '#fff', 'text-halo-width': 1.4 },
+  };
+}
+
+function addLayer(map, city, layer) {
+  const id = layerKey(city, layer.id);
+  if (!map.getSource(id)) {
+    if (layer.type === 'image') {
+      map.addSource(id, { type: 'image', url: `${DATA}/${city}/${layer.file}`, coordinates: layer.coordinates });
+    } else {
+      map.addSource(id, { type: 'geojson', data: `${DATA}/${city}/${layer.file}` });
+    }
+  }
+  for (const l of styleLayers(city, layer)) if (!map.getLayer(l.id)) map.addLayer(l);
+}
+
+function setVisible(map, city, layer, visible) {
+  for (const l of styleLayers(city, layer)) {
+    if (map.getLayer(l.id)) map.setLayoutProperty(l.id, 'visibility', visible ? 'visible' : 'none');
+  }
+}
+
+function Legend({ layer }) {
+  const items = layer.legend || (typeof layer.color === 'string' ? [{ label: layer.title, color: layer.color }] : []);
+  if (!items.length) return null;
+  return (
+    <ul className="gp-legend">
+      {items.map((it, i) => <li key={i}><i style={{ background: it.color }} />{it.label}</li>)}
+    </ul>
+  );
+}
 
 export default function Geoportal() {
+  const [params, setParams] = useSearchParams();
+  const [manifest, setManifest] = useState(null);
+  const [error, setError] = useState(null);
+  const [basemap, setBasemap] = useState('scheme');
+  const [visible, setVisibleState] = useState({});
+  const [panelOpen, setPanelOpen] = useState(() => !window.matchMedia('(max-width: 760px)').matches);
+  const mapRef = useRef(null);
+  const boxRef = useRef(null);
+  const citySlug = params.get('city') || 'muravlenko';
+  const city = useMemo(() => manifest?.cities.find((c) => c.slug === citySlug) || manifest?.cities[0], [manifest, citySlug]);
+
+  useEffect(() => { document.title = 'Геопортал. OilGasCity'; }, []);
+
+  useEffect(() => {
+    fetch(`${DATA}/manifest.json`)
+      .then((r) => { if (!r.ok) throw new Error(`manifest ${r.status}`); return r.json(); })
+      .then((m) => {
+        const v = {};
+        for (const c of m.cities) for (const g of c.groups) for (const l of g.layers) v[layerKey(c.slug, l.id)] = Boolean(l.default);
+        setVisibleState(v);
+        setManifest(m);
+      })
+      .catch((e) => { console.error(e); setError(e); });
+  }, []);
+
+  // карта создаётся один раз, подложка меняется через setStyle
+  useEffect(() => {
+    if (!manifest || mapRef.current) return undefined;
+    const first = manifest.cities.find((c) => c.slug === citySlug) || manifest.cities[0];
+    const map = new maplibregl.Map({
+      container: boxRef.current,
+      style: BASEMAPS.scheme.style,
+      bounds: first.bounds,
+      fitBoundsOptions: { padding: 40 },
+      attributionControl: { compact: true, customAttribution: 'Данные: проект РНФ № 25-27-00022' },
+    });
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), 'top-right');
+    map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
+    mapRef.current = map;
+    window.ogcMap = map; // для отладки в консоли
+    return () => { map.remove(); mapRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manifest]);
+
+  // слои текущего города: добавить включённые, синхронизировать видимость
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !city) return undefined;
+    const sync = () => {
+      for (const c of manifest.cities) {
+        for (const g of c.groups) {
+          for (const l of g.layers) {
+            const on = c.slug === city.slug && visible[layerKey(c.slug, l.id)];
+            if (on) addLayer(map, c.slug, l);
+            setVisible(map, c.slug, l, on);
+          }
+        }
+      }
+    };
+    if (map.isStyleLoaded()) sync();
+    map.on('style.load', sync);
+    return () => map.off('style.load', sync);
+  }, [city, visible, manifest]);
+
+  // подписи по щелчку
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !city) return undefined;
+    const layers = city.groups.flatMap((g) => g.layers).filter((l) => l.popup);
+    const ids = layers.flatMap((l) => {
+      const base = layerKey(city.slug, l.id);
+      return l.type === 'fill' ? [`${base}-fill`] : [base];
+    });
+    const onClick = (e) => {
+      const hits = map.queryRenderedFeatures(e.point, { layers: ids.filter((id) => map.getLayer(id)) });
+      if (!hits.length) return;
+      const hit = hits[0];
+      const layer = layers.find((l) => hit.layer.id.startsWith(layerKey(city.slug, l.id)));
+      new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(e.lngLat).setHTML(popupHtml(layer, hit.properties)).addTo(map);
+    };
+    const onMove = (e) => {
+      const n = map.queryRenderedFeatures(e.point, { layers: ids.filter((id) => map.getLayer(id)) }).length;
+      map.getCanvas().style.cursor = n ? 'pointer' : '';
+    };
+    map.on('click', onClick);
+    map.on('mousemove', onMove);
+    return () => { map.off('click', onClick); map.off('mousemove', onMove); };
+  }, [city, visible]);
+
+  // смена города: перелёт к его границам
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map && city) map.fitBounds(city.bounds, { padding: 40, duration: 900 });
+  }, [city]);
+
+  const switchBasemap = (key) => {
+    if (key === basemap || !mapRef.current) return;
+    setBasemap(key);
+    mapRef.current.setStyle(BASEMAPS[key].style);
+  };
+  const toggle = (id) => setVisibleState((v) => ({ ...v, [id]: !v[id] }));
+
   return (
-    <main className="wrap state">
-      <h1>Геопортал</h1>
-      <p>Карта загружается. <Link to="/">Вернуться на сайт</Link></p>
-    </main>
+    <div className="gp">
+      <header className="gp-bar">
+        <Link className="gp-back" to="/">OilGasCity<span>на сайт проекта</span></Link>
+        <h1><PinIcon />Геопортал</h1>
+        {manifest ? (
+          <nav className="gp-cities" aria-label="Город">
+            {manifest.cities.map((c) => (
+              <button key={c.slug} type="button" aria-pressed={c.slug === city?.slug}
+                onClick={() => setParams({ city: c.slug })}>{c.title}</button>
+            ))}
+          </nav>
+        ) : null}
+        <button type="button" className="gp-toggle" onClick={() => setPanelOpen((o) => !o)} aria-expanded={panelOpen}>
+          {panelOpen ? 'Скрыть слои' : 'Слои'}
+        </button>
+      </header>
+      <div className="gp-body">
+        {panelOpen && city ? (
+          <aside className="gp-panel" aria-label="Слои карты">
+            <div className="gp-city">
+              <h2>{city.title}</h2>
+              <p className="gp-region">{city.region}</p>
+              <p className="gp-about">{city.about}</p>
+            </div>
+            <div className="gp-base" role="group" aria-label="Подложка">
+              {Object.entries(BASEMAPS).map(([k, b]) => (
+                <button key={k} type="button" aria-pressed={k === basemap} onClick={() => switchBasemap(k)}>{b.title}</button>
+              ))}
+            </div>
+            {city.groups.map((g) => (
+              <section className="gp-group" key={g.title}>
+                <h3>{g.title}</h3>
+                {g.note ? <p className="gp-note">{g.note}</p> : null}
+                {g.layers.map((l) => {
+                  const id = layerKey(city.slug, l.id);
+                  return (
+                    <div className="gp-layer" key={id}>
+                      <label>
+                        <input type="checkbox" checked={Boolean(visible[id])} onChange={() => toggle(id)} />
+                        {l.title}
+                      </label>
+                      {visible[id] ? <Legend layer={l} /> : null}
+                      {visible[id] && l.note ? <p className="gp-note">{l.note}</p> : null}
+                    </div>
+                  );
+                })}
+              </section>
+            ))}
+            <p className="gp-source">Источник: {city.source}. <Link to={`/cities/${city.slug}`}>Страница города</Link>, <Link to="/materials#maps">карты в материалах</Link>.</p>
+          </aside>
+        ) : null}
+        <div className="gp-map" ref={boxRef}>
+          {error ? <p className="gp-error">Не удалось загрузить данные геопортала. Попробуйте обновить страницу.</p> : null}
+        </div>
+      </div>
+    </div>
   );
 }
