@@ -1,112 +1,79 @@
-import { useState } from 'react';
-import { Link, NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { PinIcon } from './Icons';
 
-const NAV_ITEMS = [
-  { to: '/', label: 'Главная' },
-  { to: '/cities', label: 'Города' },
-  { to: '/expeditions', label: 'Экспедиции' },
-  { to: '/publications', label: 'Публикации' },
-  { to: '/team', label: 'Коллектив' },
-  { to: '/blog', label: 'Новости' },
+const NAV = [
+  { to: '/#about', label: 'О проекте', match: (p, h) => p === '/' && h === '#about' },
+  { to: '/cities/muravlenko', label: 'Муравленко', city: true },
+  { to: '/cities/kogalym', label: 'Когалым', city: true },
+  { to: '/results', label: 'Результаты', match: (p) => p.startsWith('/results') },
+  { to: '/materials', label: 'Материалы', match: (p) => p.startsWith('/materials') || p.startsWith('/expeditions') },
+  { to: '/news', label: 'Новости', match: (p) => p.startsWith('/news') },
 ];
 
-export default function Layout() {
-  const [mobileOpen, setMobileOpen] = useState(false);
+export function Header() {
+  const { pathname, hash, key } = useLocation();
+  // меню на телефоне открыто только на той странице, где его открыли: переход его закрывает
+  const [openAt, setOpenAt] = useState(null);
+  const open = openAt === key;
+  const setOpen = (value) => setOpenAt(value ? key : null);
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#f9fafb' }}>
-      <header style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 40,
-        background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)',
-        borderBottom: '1px solid #e5e7eb'
-      }}>
-        <div style={{ maxWidth: '80rem', margin: '0 auto', padding: '0 1rem', height: '4rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}>
-            <span style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0284c7' }}>OG</span>
-            <span style={{ color: '#111827', fontWeight: 600, fontSize: '0.875rem' }}>OilGasCity</span>
-          </Link>
+    <header className="bar">
+      <div className="wrap">
+        <Link className="logo" to="/">OilGasCity<span>проект РНФ № 25-27-00022</span></Link>
+        <input className="menu-check" type="checkbox" id="menu-check" aria-label="Показать разделы сайта"
+          checked={open} onChange={(e) => setOpen(e.target.checked)} />
+        <label className="menu-btn" htmlFor="menu-check">Меню</label>
+        <nav className="nav" aria-label="Основная навигация">
+          {NAV.map((item) => (item.city ? (
+            <NavLink key={item.to} className="city" to={item.to}>{item.label}</NavLink>
+          ) : (
+            <Link key={item.to} to={item.to} aria-current={item.match(pathname, hash) ? 'page' : undefined}>{item.label}</Link>
+          )))}
+        </nav>
+        <Link className="geo-btn" to="/geoportal" title="Интерактивная карта проекта"><PinIcon />Геопортал</Link>
+      </div>
+    </header>
+  );
+}
 
-          {/* Desktop nav */}
-          <nav style={{ display: 'flex', gap: '0.25rem' }} className="desktop-nav">
-            {NAV_ITEMS.map((item) => (
-              <NavLink key={item.to} to={item.to} end={item.to === '/'}
-                style={({ isActive }) => ({
-                  padding: '0.5rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.875rem', fontWeight: 500,
-                  textDecoration: 'none', transition: 'all 0.2s',
-                  color: isActive ? '#0284c7' : '#6b7280',
-                  background: isActive ? '#f0f9ff' : 'transparent',
-                })}>
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
-
-          {/* Mobile toggle */}
-          <button onClick={() => setMobileOpen(!mobileOpen)} className="mobile-toggle"
-            style={{ padding: '0.5rem', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem' }}>
-            {mobileOpen ? '\u2715' : '\u2630'}
-          </button>
+export function Footer() {
+  return (
+    <footer className="end">
+      <div className="wrap">
+        <div>
+          <p>Исследование выполнено за счёт гранта Российского научного фонда <span className="nw">№ 25-27-00022</span>, <a href="https://rscf.ru/project/25-27-00022/">https://rscf.ru/project/25-27-00022/</a></p>
+          <p>Институт криосферы Земли Тюменского научного центра СО РАН</p>
+          <p className="upd">Содержание сайта ведётся в системе управления: <a href="/cms/">вход для редакторов</a></p>
         </div>
+        <ul>
+          <li><Link to="/#about">О проекте</Link></li>
+          <li><Link to="/cities/muravlenko">Муравленко</Link></li>
+          <li><Link to="/cities/kogalym">Когалым</Link></li>
+          <li><Link to="/results">Результаты</Link></li>
+        </ul>
+        <ul>
+          <li><Link to="/materials">Материалы</Link></li>
+          <li><Link to="/materials#expeditions">Экспедиции</Link></li>
+          <li><Link to="/materials#team">Коллектив</Link></li>
+          <li><Link to="/geoportal">Геопортал</Link></li>
+        </ul>
+      </div>
+    </footer>
+  );
+}
 
-        {mobileOpen && (
-          <div className="mobile-menu" style={{ borderTop: '1px solid #e5e7eb', background: 'rgba(255,255,255,0.97)', padding: '0.75rem 1rem' }}>
-            {NAV_ITEMS.map((item) => (
-              <NavLink key={item.to} to={item.to} end={item.to === '/'} onClick={() => setMobileOpen(false)}
-                style={({ isActive }) => ({
-                  display: 'block', padding: '0.625rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.875rem',
-                  fontWeight: 500, textDecoration: 'none',
-                  color: isActive ? '#0284c7' : '#6b7280',
-                  background: isActive ? '#f0f9ff' : 'transparent',
-                })}>
-                {item.label}
-              </NavLink>
-            ))}
-          </div>
-        )}
-      </header>
-
-      <main style={{ flex: 1, paddingTop: '4rem' }}>
-        <Outlet />
-      </main>
-
-      <footer style={{ borderTop: '1px solid #e5e7eb', background: 'white', padding: '2.5rem 0' }}>
-        <div style={{ maxWidth: '80rem', margin: '0 auto', padding: '0 1rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '2rem', fontSize: '0.875rem' }}>
-            <div>
-              <h4 style={{ color: '#111827', fontWeight: 600, marginBottom: '0.75rem' }}>Грант</h4>
-              <p style={{ color: '#6b7280', lineHeight: 1.6 }}>Исследование выполняется при поддержке Российского научного фонда (проект № 25-27-00022)</p>
-            </div>
-            <div>
-              <h4 style={{ color: '#111827', fontWeight: 600, marginBottom: '0.75rem' }}>Организация</h4>
-              <p style={{ color: '#6b7280', lineHeight: 1.6 }}>Институт криосферы Земли ТюмНЦ СО РАН</p>
-            </div>
-            <div>
-              <h4 style={{ color: '#111827', fontWeight: 600, marginBottom: '0.75rem' }}>Разделы</h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                {NAV_ITEMS.map((item) => (
-                  <Link key={item.to} to={item.to} style={{ color: '#6b7280', textDecoration: 'none' }}>{item.label}</Link>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid #f3f4f6', textAlign: 'center', color: '#9ca3af', fontSize: '0.75rem' }}>
-            © {new Date().getFullYear()} OilGasCity — РНФ № 25-27-00022
-          </div>
-        </div>
-      </footer>
-
-      <style>{`
-        .desktop-nav { display: none; }
-        .mobile-toggle { display: block; }
-        @media (min-width: 768px) {
-          .desktop-nav { display: flex !important; }
-          .mobile-toggle { display: none !important; }
-          .mobile-menu { display: none !important; }
-        }
-        @media (max-width: 767px) {
-          footer > div > div:first-child { grid-template-columns: 1fr !important; }
-        }
-      `}</style>
-    </div>
+export default function Layout() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    if (!window.location.hash) window.scrollTo(0, 0);
+  }, [pathname]);
+  return (
+    <>
+      <Header />
+      <Outlet />
+      <Footer />
+    </>
   );
 }

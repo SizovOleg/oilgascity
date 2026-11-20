@@ -1,17 +1,25 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+// Куда vite dev проксирует API и медиа. По умолчанию живой сайт; для проверки на локальном
+// бэкенде с копией базы: OGC_API=http://127.0.0.1:8000 npm run dev
+const api = process.env.OGC_API || 'https://oilgascity.ru';
+const media = process.env.OGC_MEDIA || 'https://oilgascity.ru';
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react()],
   base: '/',
   server: {
     host: '0.0.0.0',
     port: 3000,
-    // Локальная разработка на данных прода: API и медиа проксируются на сайт (только для vite dev)
     proxy: {
-      '/wt-api': { target: 'https://oilgascity.ru', changeOrigin: true, secure: true },
-      '/oilgascity-media': { target: 'https://oilgascity.ru', changeOrigin: true, secure: true },
+      '/wt-api': { target: api, changeOrigin: true, secure: true },
+      '/oilgascity-media': { target: media, changeOrigin: true, secure: true },
+      '/geodata': { target: media, changeOrigin: true, secure: true },
     },
   },
-})
+  build: {
+    // карта геопортала уходит в отдельный чанк и грузится только на /geoportal
+    chunkSizeWarningLimit: 1200,
+  },
+});
