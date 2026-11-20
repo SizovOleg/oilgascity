@@ -60,6 +60,7 @@
 .gp-ramp { display: grid; grid-template-columns: 1fr 1fr; font-size: 0.72rem; color: var(--mute); margin: 0.2rem 0 0.3rem; }
 .gp-ramp i { grid-column: 1 / -1; height: 0.6rem; border-radius: 2px; border: 1px solid rgba(0, 0, 0, 0.15); }
 .gp-ramp span:last-child { text-align: right; }
+.gp-caveat { font-size: 0.75rem; line-height: 1.35; margin: 0.3rem 0; padding: 0.4rem 0.55rem; background: var(--sand); border-left: 3px solid var(--tape); }
 .gp-opacity { display: flex; align-items: center; gap: 0.6rem; font-size: 0.78rem; color: var(--mute); margin-top: 0.3rem; }
 .gp-opacity input { flex: 1; accent-color: var(--tape); }
 .gp-bare { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; margin-top: 0.45rem; cursor: pointer; }
@@ -92,7 +93,7 @@
 /* Просмотр фото на весь экран */
 .gp-lightbox { position: fixed; inset: 0; z-index: 60; background: rgba(10, 18, 22, 0.94); display: flex; align-items: center; justify-content: center; padding: 3rem 4rem; }
 .gp-lightbox figure { margin: 0; max-width: 100%; max-height: 100%; display: flex; flex-direction: column; align-items: center; }
-.gp-lightbox img { max-width: 100%; max-height: calc(100vh - 8rem); width: auto; height: auto; object-fit: contain; border-radius: 4px; }
+.gp-lightbox img { max-width: 100%; max-height: calc(100vh - 8rem); width: auto; height: auto; object-fit: contain; border-radius: 4px; background: center / cover no-repeat; }
 .gp-lightbox figcaption { color: #fff; margin-top: 0.7rem; font-size: 0.9rem; }
 .gp-lightbox figcaption span { color: #B8C4C7; margin-left: 0.4rem; }
 .lb-nav, .lb-close { font: inherit; position: absolute; border: 0; background: rgba(255, 255, 255, 0.12); color: #fff; cursor: pointer; border-radius: 50%; line-height: 1; }

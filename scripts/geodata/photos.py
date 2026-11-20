@@ -8,6 +8,7 @@
            площадка M_OpenSpace в пределах 60 м. Таблица инвентаризации даёт описание.
   Муравленко, парки: названия папок сопоставлены с названиями скверов в M_OpenSpace вручную (PARKS).
 
+Кадры пишутся в WebP (полный 1600 px q75, около 220 КБ; миниатюра 360 px q72, около 12 КБ).
 Снимки с различимыми людьми не публикуются: детектор Faster R-CNN (torchvision, класс «человек»)
 отсеивает кадр, если на нём есть человек выше 7% высоты кадра с уверенностью от 0,55. Отсеянные
 перечисляются в excluded.csv для просмотра. Выходные снимки без EXIF (в том числе без GPS).
@@ -172,11 +173,11 @@ def process(city: str, groups: dict[str, dict], det: PersonDetector, out: Path, 
         for i, f in enumerate(files, 1):
             dst = out / city / fid
             name = f"{i:03d}"
-            if (dst / f"{name}.jpg").exists() and (dst / f"{name}_t.jpg").exists():
+            if (dst / f"{name}.webp").exists() and (dst / f"{name}_t.webp").exists():
                 # уже обработан при прошлом запуске (номер снимка зависит только от отсортированного списка файлов)
-                with Image.open(dst / f"{name}.jpg") as done:
+                with Image.open(dst / f"{name}.webp") as done:
                     w, h = done.size
-                items.append({"t": f"{URL_BASE}/{city}/{fid}/{name}_t.jpg", "f": f"{URL_BASE}/{city}/{fid}/{name}.jpg",
+                items.append({"t": f"{URL_BASE}/{city}/{fid}/{name}_t.webp", "f": f"{URL_BASE}/{city}/{fid}/{name}.webp",
                               "w": w, "h": h})
                 continue
             try:
@@ -191,11 +192,11 @@ def process(city: str, groups: dict[str, dict], det: PersonDetector, out: Path, 
             dst.mkdir(parents=True, exist_ok=True)
             full = im.copy()
             full.thumbnail((FULL_PX, FULL_PX))
-            full.save(dst / f"{name}.jpg", quality=80, optimize=True, progressive=True)
+            full.save(dst / f"{name}.webp", "WEBP", quality=75, method=6)
             thumb = im.copy()
             thumb.thumbnail((THUMB_PX, THUMB_PX))
-            thumb.save(dst / f"{name}_t.jpg", quality=72, optimize=True)
-            items.append({"t": f"{URL_BASE}/{city}/{fid}/{name}_t.jpg", "f": f"{URL_BASE}/{city}/{fid}/{name}.jpg",
+            thumb.save(dst / f"{name}_t.webp", "WEBP", quality=72, method=6)
+            items.append({"t": f"{URL_BASE}/{city}/{fid}/{name}_t.webp", "f": f"{URL_BASE}/{city}/{fid}/{name}.webp",
                           "w": full.width, "h": full.height})
         if items:
             index[fid] = {"title": g["title"], "date": g["date"], "note": g.get("note", ""), "items": items}

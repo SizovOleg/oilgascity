@@ -383,6 +383,13 @@ IMAGERY_KINDS = [
     ("wv2", "Сверхвысокое разрешение", "© Maxar Technologies"),
     ("ge1", "Сверхвысокое разрешение", "© Maxar Technologies"),
 ]
+# Оговорки о качестве снимка: показываются в панели под выбором синтеза
+IMAGERY_NOTES = {
+    "uav-2025": "На участке «городок» часть кадров снята сквозь дымку: белёсые пятна скрывают землю. "
+                "Это дефект съёмки, а не обработки.",
+    "uav-ndvi": "На участке «городок» под пятнами дымки на ортофото NDVI занижен (около нуля), "
+                "там значения недостоверны.",
+}
 
 
 def imagery_entries(entries: list[dict]) -> list[dict]:
@@ -402,6 +409,9 @@ def imagery_entries(entries: list[dict]) -> list[dict]:
         return (2, year, e["id"])
 
     out = [{**e, "group": kinds[e["id"].split("-")[0]][0], "credit": kinds[e["id"].split("-")[0]][1]} for e in entries]
+    for e in out:
+        if e["id"] in IMAGERY_NOTES:
+            e["note"] = IMAGERY_NOTES[e["id"]]
     return sorted(out, key=key)
 
 

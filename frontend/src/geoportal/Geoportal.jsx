@@ -58,6 +58,16 @@ const fmt = (v) => (typeof v === 'number' ? String(v).replace('.', ',') : v);
 const tabsOf = (city) => city.tabs || [{ id: 'green', title: 'Слои', groups: city.groups || [] }];
 const layersOf = (tab) => tab.groups.flatMap((g) => g.layers);
 
+// Фоновая загрузка кадра в кэш браузера
+const preloaded = new Set();
+function preload(src) {
+  if (!src || preloaded.has(src)) return;
+  preloaded.add(src);
+  const img = new Image();
+  img.decoding = 'async';
+  img.src = src;
+}
+
 // Просмотр фото на весь экран: стрелки и Esc с клавиатуры, щелчок по фону закрывает
 function Lightbox({ gallery, index, setIndex, onClose }) {
   const items = gallery.items;
@@ -71,11 +81,17 @@ function Lightbox({ gallery, index, setIndex, onClose }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [items.length, onClose, setIndex]);
+  // соседние кадры грузятся заранее: листание стрелками без ожидания
+  useEffect(() => {
+    for (const d of [1, -1]) preload(items[(index + d + items.length) % items.length].f);
+  }, [index, items]);
   const it = items[index];
   return (
     <div className="gp-lightbox" role="dialog" aria-modal="true" aria-label={gallery.title} onClick={onClose}>
       <figure onClick={(e) => e.stopPropagation()}>
-        <img src={it.f} alt={`${gallery.title}, снимок ${index + 1}`} width={it.w} height={it.h} />
+        {/* пока грузится полный кадр, на его месте растянута уже загруженная миниатюра */}
+        <img key={it.f} src={it.f} alt={`${gallery.title}, снимок ${index + 1}`} width={it.w} height={it.h}
+          style={{ backgroundImage: `url("${it.t}")` }} />
         <figcaption>
           <b>{gallery.title}</b> <span>{index + 1} из {items.length}{gallery.date ? `, ${gallery.date}` : ''}</span>
         </figcaption>
@@ -106,7 +122,8 @@ function PhotoStrip({ gallery, onOpen, onClose }) {
         <button type="button" className="gp-strip-nav" aria-label="Прокрутить назад" onClick={() => scroll(-1)}>‹</button>
         <div className="gp-thumbs" ref={ref}>
           {gallery.items.map((it, i) => (
-            <button key={it.t} type="button" onClick={() => onOpen(i)} aria-label={`Открыть снимок ${i + 1}`}>
+            <button key={it.t} type="button" onClick={() => onOpen(i)} aria-label={`Открыть снимок ${i + 1}`}
+              onPointerEnter={() => preload(it.f)} onFocus={() => preload(it.f)}>
               <img src={it.t} alt="" loading="lazy" />
             </button>
           ))}
@@ -241,6 +258,7 @@ function ImageryPicker({ city, prod, comp, zoom, opacity, bare, onPick, onComp, 
             </div>
           ) : null}
           <p className="gp-note">Разрешение {prod.res}.{prod.credit ? ` ${prod.credit}.` : ''}</p>
+          {prod.note ? <p className="gp-caveat">{prod.note}</p> : null}
           {far ? <p className="gp-filter">Снимок виден при более крупном масштабе: приблизьте карту.</p> : null}
           <label className="gp-opacity">
             Непрозрачность
