@@ -166,6 +166,10 @@ export default function Geoportal() {
   const [visible, setVisibleState] = useState({});
   const [filter, setFilter] = useState(null);
   const [panelOpen, setPanelOpen] = useState(() => !window.matchMedia('(max-width: 760px)').matches);
+  // ширина панели слоёв: тянется за край мышью или стрелками, запоминается в браузере
+  const [panelW, setPanelW] = useState(() => {
+    try { return Number(localStorage.getItem('gp-panel-w')) || 336; } catch { return 336; }
+  });
   const mapRef = useRef(null);
   const boxRef = useRef(null);
   const citySlug = params.get('city') || 'muravlenko';
@@ -253,6 +257,33 @@ export default function Geoportal() {
     return () => { map.off('click', onClick); map.off('mousemove', onMove); };
   }, [city, tab, visible]);
 
+  // карта подстраивается под новую ширину панели
+  useEffect(() => {
+    const id = requestAnimationFrame(() => mapRef.current?.resize());
+    try { localStorage.setItem('gp-panel-w', String(panelW)); } catch { /* хранилище недоступно: ширина не запомнится */ }
+    return () => cancelAnimationFrame(id);
+  }, [panelW, panelOpen]);
+
+  const clampW = (w) => Math.round(Math.min(Math.max(w, 260), Math.min(760, window.innerWidth * 0.6)));
+  const startResize = (e) => {
+    e.preventDefault();
+    const x0 = e.clientX;
+    const w0 = panelW;
+    const move = (ev) => setPanelW(clampW(w0 + ev.clientX - x0));
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      document.body.classList.remove('gp-resizing');
+    };
+    document.body.classList.add('gp-resizing');
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const keyResize = (e) => {
+    if (e.key === 'ArrowLeft') setPanelW((w) => clampW(w - 24));
+    if (e.key === 'ArrowRight') setPanelW((w) => clampW(w + 24));
+  };
+
   // смена города: перелёт к его границам
   useEffect(() => {
     const map = mapRef.current;
@@ -292,7 +323,7 @@ export default function Geoportal() {
       </header>
       <div className="gp-body">
         {panelOpen && city && tab ? (
-          <aside className="gp-panel" aria-label="Слои карты">
+          <aside className="gp-panel" aria-label="Слои карты" style={{ '--panel-w': `${panelW}px` }}>
             <div className="gp-city">
               <h2>{city.title}</h2>
               <p className="gp-region">{city.region}</p>
@@ -336,6 +367,11 @@ export default function Geoportal() {
             {filter ? <p className="gp-filter">Показаны дома: {filter}. <button type="button" onClick={() => setFilter(null)}>Показать все</button></p> : null}
             <p className="gp-source">Источник: {tab.source || city.source}. <Link to={`/cities/${city.slug}`}>Страница города</Link>, <Link to="/materials#maps">карты в материалах</Link>.</p>
           </aside>
+        ) : null}
+        {panelOpen && city && tab ? (
+          <div className="gp-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели слоёв"
+            aria-valuenow={panelW} aria-valuemin={260} aria-valuemax={760} tabIndex={0}
+            onPointerDown={startResize} onKeyDown={keyResize} title="Потяните, чтобы изменить ширину панели" />
         ) : null}
         <div className="gp-map" ref={boxRef}>
           {error ? <p className="gp-error">Не удалось загрузить данные геопортала. Попробуйте обновить страницу.</p> : null}

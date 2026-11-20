@@ -10,7 +10,14 @@
 .gp-cities button[aria-pressed="true"], .gp-base button[aria-pressed="true"] { background: var(--ink); color: #fff; }
 .gp-toggle { display: none; }
 .gp-body { flex: 1; display: flex; min-height: 0; }
-.gp-panel { width: 21rem; flex: none; overflow-y: auto; border-right: 1px solid var(--line); padding: 1rem 1.1rem 1.4rem; font-size: 0.875rem; background: var(--snow); }
+.gp-panel { width: var(--panel-w, 21rem); flex: none; overflow-y: auto; padding: 1rem 1.1rem 1.4rem; font-size: 0.875rem; background: var(--snow); }
+/* Край панели: тянется мышью, на фокусе стрелками */
+.gp-resize { flex: none; width: 8px; margin-left: -4px; margin-right: -4px; position: relative; z-index: 3; cursor: col-resize; touch-action: none; }
+.gp-resize::before { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: var(--line); transition: background 0.2s, width 0.2s, left 0.2s; }
+.gp-resize:hover::before, .gp-resize:focus-visible::before, .gp-resizing .gp-resize::before { left: 2px; width: 4px; background: var(--tape); }
+.gp-resize::after { content: ""; position: absolute; top: 50%; left: 1px; width: 6px; height: 2.2rem; margin-top: -1.1rem; border-radius: 3px; background: var(--line); }
+.gp-resizing { cursor: col-resize; user-select: none; }
+.gp-resizing .gp-map { pointer-events: none; }
 .gp-city h2 { font-size: 1.75rem; }
 .gp-region { color: var(--mute); margin: 0.25rem 0 0.5rem; }
 .gp-about { margin-bottom: 0.9rem; }
@@ -63,4 +70,5 @@
   .gp-toggle { display: block; margin-left: auto; }
   .gp-body { flex-direction: column-reverse; }
   .gp-panel { width: auto; max-height: 48vh; border-right: 0; border-top: 2px solid var(--ink); }
+  .gp-resize { display: none; }
 }
