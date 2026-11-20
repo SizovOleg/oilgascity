@@ -28,7 +28,9 @@ export function useRevealOnScroll() {
       for (const n of nodes) {
         if (n.classList.contains('rv')) continue;
         n.classList.add('rv');
-        io.observe(n);
+        // в скрытой вкладке (фон, предзагрузка, роботы) наблюдатель может не сработать: блок сразу виден целиком
+        if (document.visibilityState !== 'visible') n.classList.add('rv-in');
+        else io.observe(n);
       }
     };
     mark(document.body);
