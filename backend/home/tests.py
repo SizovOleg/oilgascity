@@ -12,6 +12,7 @@ from home.models import (
     ExpeditionsIndexPage,
     HomePage,
     PublicationsPage,
+    ReportPage,
     TeamPage,
 )
 
@@ -92,18 +93,26 @@ class FrontendUrlTests(WagtailPageTestCase):
                 body="<p>Текст</p>",
             )
         )
+        cls.results = cls.home.add_child(
+            instance=ReportPage(title="Результаты 2025", slug="results-2025", kind="results", year=2025)
+        )
+        cls.materials = cls.home.add_child(
+            instance=ReportPage(title="Материалы", slug="materials", kind="materials")
+        )
 
     def expected_paths(self) -> list[tuple[Page, str]]:
         return [
             (self.home, "/"),
-            (self.cities, "/cities"),
-            (self.city, f"/cities/{self.city.pk}"),
-            (self.expeditions, "/expeditions"),
+            (self.cities, "/#cities"),
+            (self.city, "/cities/muravlenko"),
+            (self.expeditions, "/materials#expeditions"),
             (self.expedition, f"/expeditions/{self.expedition.pk}"),
-            (self.publications, "/publications"),
-            (self.team, "/team"),
-            (self.blog, "/blog"),
-            (self.post, f"/blog/{self.post.pk}"),
+            (self.publications, "/materials#publications"),
+            (self.team, "/materials#team"),
+            (self.blog, "/news"),
+            (self.post, f"/news/{self.post.pk}"),
+            (self.results, "/results/2025"),
+            (self.materials, "/materials"),
         ]
 
     def test_page_urls_match_react_routes(self) -> None:
@@ -138,7 +147,7 @@ class FrontendUrlTests(WagtailPageTestCase):
         response = self.client.get(f"/cms/pages/{self.city.pk}/edit/")
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
-        self.assertRegex(html, rf'href="(https://oilgascity\.ru)?/cities/{self.city.pk}"')
+        self.assertRegex(html, r'href="(https://oilgascity\.ru)?/cities/muravlenko"')
         # Старых адресов Wagtail (слаги, localhost) в ссылках быть не должно
         self.assertNotIn('href="http://localhost', html)
         self.assertIsNone(re.search(r'href="[^"]*/muravlenko/"', html))

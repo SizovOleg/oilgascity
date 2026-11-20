@@ -2,13 +2,14 @@ from django.conf import settings
 from django.db import models
 from django.http import HttpRequest
 from wagtail.models import Page, Orderable
-from wagtail.fields import RichTextField
+from wagtail.fields import RichTextField, StreamField
 from wagtail.admin.panels import FieldPanel, MultiFieldPanel, InlinePanel
 from wagtail.api import APIField
 from wagtail.images.api.fields import ImageRenditionField
 from modelcluster.fields import ParentalKey
 from rest_framework.fields import Field
 
+from .blocks import PassportRowBlock, ReportStreamBlock, StatBlock
 from .renditions import LARGE_SPEC, THUMBNAIL_SPEC
 
 
@@ -21,18 +22,24 @@ class FrontendUrlMixin:
     ведут на несуществующие адреса. Пустой FRONTEND_BASE_URL выключает подмену.
     """
 
-    # Маршрут страницы во фронтенде; {id} заменяется на id страницы
+    # Маршрут страницы во фронтенде; {id} и {slug} заменяются на id и слаг страницы
     frontend_path: str | None = None
+
+    def get_frontend_path(self) -> str | None:
+        if self.frontend_path is None:
+            return None
+        return self.frontend_path.format(id=self.pk, slug=self.slug)
 
     def get_url_parts(
         self, request: HttpRequest | None = None
     ) -> tuple[int, str | None, str | None] | None:
         url_parts = super().get_url_parts(request=request)
         base_url = getattr(settings, "FRONTEND_BASE_URL", "")
-        if url_parts is None or not base_url or self.frontend_path is None:
+        path = self.get_frontend_path()
+        if url_parts is None or not base_url or path is None:
             return url_parts
         site_id = url_parts[0]
-        return (site_id, base_url.rstrip("/"), self.frontend_path.format(id=self.pk))
+        return (site_id, base_url.rstrip("/"), path)
 
 
 class ImageSerializedField(Field):
@@ -64,6 +71,9 @@ class GallerySerializedField(Field):
         return [{
             'id': item.id,
             'caption': item.caption,
+            'theme': item.theme,
+            'shot_date': item.shot_date,
+            'author': item.author,
             'image': {
                 'original': item.image.file.url,
                 'thumbnail': item.image.get_rendition(THUMBNAIL_SPEC).url,
@@ -100,9 +110,38 @@ class PublicationsSerializedField(Field):
             'year': item.year,
             'abstract': item.abstract,
             'doi': item.doi,
+            'status': item.status,
+            'citation': item.citation,
+            'pdf_url': item.pdf_url,
+            'group': item.group,
             'pdf_file': DocumentSerializedField().to_representation(item.pdf_file),
             'cover_image': ImageSerializedField().to_representation(item.cover_image),
         } for item in value.all()]
+
+
+PHOTO_THEMES = [
+    ("parks", "парки и скверы"),
+    ("sites", "детские и спортивные площадки"),
+    ("geobot", "геоботаника"),
+    ("sand", "пески и карьеры"),
+    ("waste", "свалки"),
+    ("town", "город и муралы"),
+    ("water", "водоёмы"),
+    ("field", "полевая работа"),
+]
+
+
+class PhotoMeta(models.Model):
+    """Справочные сведения о снимке для подписи и фильтров фототеки."""
+
+    theme = models.CharField("Тема", max_length=20, choices=PHOTO_THEMES, blank=True)
+    shot_date = models.CharField("Дата съёмки", max_length=50, blank=True, help_text="Например: июль 2025")
+    author = models.CharField("Автор снимка", max_length=200, blank=True)
+
+    meta_panels = [FieldPanel('theme'), FieldPanel('shot_date'), FieldPanel('author')]
+
+    class Meta:
+        abstract = True
 
 
 # === 1. О ПРОЕКТЕ (главная) ===
@@ -117,13 +156,39 @@ class HomePage(FrontendUrlMixin, Page):
         'wagtailimages.Image', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='+', verbose_name="Фоновое изображение"
     )
+    hero_title = models.CharField("Заголовок первого экрана", max_length=120, blank=True)
+    lead = models.TextField("Вводная фраза первого экрана", blank=True)
+    header_caption = models.CharField("Подпись к фото первого экрана", max_length=300, blank=True)
+    header_meta = models.CharField("Место и дата фото первого экрана", max_length=200, blank=True)
+    stats = StreamField([('stat', StatBlock())], blank=True, verbose_name="Проект в цифрах")
+    goal = RichTextField("Цель и задача проекта", blank=True)
+    keywords_ru = models.TextField("Ключевые слова", blank=True)
+    keywords_en = models.TextField("Ключевые слова (англ.)", blank=True)
+    abstract_en = RichTextField("Аннотация на английском", blank=True)
+    expected_source = models.CharField("Источник ожидаемых результатов", max_length=300, blank=True)
+    years_intro = models.TextField("Вводный текст блока «Результаты по годам»", blank=True)
 
     content_panels = Page.content_panels + [
+        MultiFieldPanel([
+            FieldPanel('hero_title'),
+            FieldPanel('lead'),
+            FieldPanel('header_image'),
+            FieldPanel('header_caption'),
+            FieldPanel('header_meta'),
+        ], heading="Первый экран"),
+        FieldPanel('stats'),
+        MultiFieldPanel([
+            FieldPanel('goal'),
+            FieldPanel('expected_results'),
+            FieldPanel('expected_source'),
+            FieldPanel('keywords_ru'),
+            FieldPanel('keywords_en'),
+            FieldPanel('abstract_en'),
+        ], heading="Цель и задачи"),
+        FieldPanel('years_intro'),
         FieldPanel('subtitle'),
-        FieldPanel('header_image'),
         FieldPanel('body'),
         FieldPanel('grant_info'),
-        FieldPanel('expected_results'),
     ]
 
     api_fields = [
@@ -132,6 +197,17 @@ class HomePage(FrontendUrlMixin, Page):
         APIField('grant_info'),
         APIField('expected_results'),
         APIField('header_image', serializer=ImageSerializedField()),
+        APIField('hero_title'),
+        APIField('lead'),
+        APIField('header_caption'),
+        APIField('header_meta'),
+        APIField('stats'),
+        APIField('goal'),
+        APIField('keywords_ru'),
+        APIField('keywords_en'),
+        APIField('abstract_en'),
+        APIField('expected_source'),
+        APIField('years_intro'),
     ]
 
     class Meta:
@@ -143,12 +219,13 @@ class HomePage(FrontendUrlMixin, Page):
         'home.PublicationsPage',
         'home.TeamPage',
         'home.BlogIndexPage',
+        'home.ReportPage',
     ]
 
 
 # === 2. ГОРОДА ===
 class CitiesIndexPage(FrontendUrlMixin, Page):
-    frontend_path = "/cities"
+    frontend_path = "/#cities"
 
     intro = RichTextField("Вводный текст", blank=True)
 
@@ -167,7 +244,7 @@ class CitiesIndexPage(FrontendUrlMixin, Page):
 
 
 class CityPage(FrontendUrlMixin, Page):
-    frontend_path = "/cities/{id}"
+    frontend_path = "/cities/{slug}"
 
     description = RichTextField("Описание города")
     population = models.CharField("Население", max_length=100, blank=True)
@@ -179,10 +256,35 @@ class CityPage(FrontendUrlMixin, Page):
         'wagtailimages.Image', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='+', verbose_name="Главное изображение"
     )
+    lead = models.TextField("Вводная фраза", blank=True)
+    header_caption = models.CharField("Подпись к главному фото", max_length=300, blank=True)
+    header_meta = models.CharField("Место и дата главного фото", max_length=200, blank=True)
+    history_title = models.CharField("Заголовок раздела с описанием", max_length=200, blank=True)
+    passport = StreamField([('row', PassportRowBlock())], blank=True, verbose_name="Паспорт города")
+    passport_source = models.CharField("Источник паспорта", max_length=300, blank=True)
+    passport_map = models.ForeignKey(
+        'wagtailimages.Image', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+', verbose_name="Карта рядом с паспортом"
+    )
+    passport_map_caption = models.CharField("Подпись к карте", max_length=400, blank=True)
+    passport_map_source = models.CharField("Источник карты", max_length=400, blank=True)
+    sections = StreamField(ReportStreamBlock(), blank=True, verbose_name="Разделы страницы")
 
     content_panels = Page.content_panels + [
+        FieldPanel('lead'),
         FieldPanel('header_image'),
+        FieldPanel('header_caption'),
+        FieldPanel('header_meta'),
+        FieldPanel('history_title'),
         FieldPanel('description'),
+        MultiFieldPanel([
+            FieldPanel('passport'),
+            FieldPanel('passport_source'),
+            FieldPanel('passport_map'),
+            FieldPanel('passport_map_caption'),
+            FieldPanel('passport_map_source'),
+        ], heading="Паспорт города"),
+        FieldPanel('sections'),
         MultiFieldPanel([
             FieldPanel('population'),
             FieldPanel('founded'),
@@ -202,6 +304,16 @@ class CityPage(FrontendUrlMixin, Page):
         APIField('longitude'),
         APIField('header_image', serializer=ImageSerializedField()),
         APIField('city_gallery', serializer=GallerySerializedField()),
+        APIField('lead'),
+        APIField('header_caption'),
+        APIField('header_meta'),
+        APIField('history_title'),
+        APIField('passport'),
+        APIField('passport_source'),
+        APIField('passport_map', serializer=ImageSerializedField()),
+        APIField('passport_map_caption'),
+        APIField('passport_map_source'),
+        APIField('sections'),
     ]
 
     class Meta:
@@ -210,7 +322,7 @@ class CityPage(FrontendUrlMixin, Page):
     parent_page_types = ['home.CitiesIndexPage']
 
 
-class CityGalleryImage(Orderable):
+class CityGalleryImage(PhotoMeta, Orderable):
     page = ParentalKey(CityPage, on_delete=models.CASCADE, related_name='city_gallery')
     image = models.ForeignKey(
         'wagtailimages.Image', on_delete=models.CASCADE, related_name='+'
@@ -220,12 +332,12 @@ class CityGalleryImage(Orderable):
     panels = [
         FieldPanel('image'),
         FieldPanel('caption'),
-    ]
+    ] + PhotoMeta.meta_panels
 
 
 # === 3. ЭКСПЕДИЦИИ ===
 class ExpeditionsIndexPage(FrontendUrlMixin, Page):
-    frontend_path = "/expeditions"
+    frontend_path = "/materials#expeditions"
 
     intro = RichTextField("Вводный текст", blank=True)
 
@@ -281,7 +393,7 @@ class ExpeditionPage(FrontendUrlMixin, Page):
     parent_page_types = ['home.ExpeditionsIndexPage']
 
 
-class ExpeditionGalleryImage(Orderable):
+class ExpeditionGalleryImage(PhotoMeta, Orderable):
     page = ParentalKey(ExpeditionPage, on_delete=models.CASCADE, related_name='expedition_gallery')
     image = models.ForeignKey(
         'wagtailimages.Image', on_delete=models.CASCADE, related_name='+'
@@ -291,12 +403,12 @@ class ExpeditionGalleryImage(Orderable):
     panels = [
         FieldPanel('image'),
         FieldPanel('caption'),
-    ]
+    ] + PhotoMeta.meta_panels
 
 
 # === 4. ПУБЛИКАЦИИ ===
 class PublicationsPage(FrontendUrlMixin, Page):
-    frontend_path = "/publications"
+    frontend_path = "/materials#publications"
 
     intro = RichTextField("Вводный текст", blank=True)
 
@@ -324,6 +436,14 @@ class Publication(Orderable):
     year = models.IntegerField("Год")
     abstract = RichTextField("Аннотация", blank=True)
     doi = models.URLField("DOI / Ссылка", blank=True)
+    status = models.CharField("Статус", max_length=20, blank=True, choices=[
+        ("published", "опубликовано"), ("in_press", "в печати"), ("in_review", "на рецензировании"),
+    ])
+    citation = models.TextField("Библиографическая запись (ГОСТ)", blank=True)
+    pdf_url = models.URLField("Ссылка на полный текст", blank=True)
+    group = models.CharField("Группа", max_length=20, default="project", choices=[
+        ("project", "по результатам проекта"), ("related", "смежные публикации коллектива"),
+    ])
     pdf_file = models.ForeignKey(
         'wagtaildocs.Document', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='+', verbose_name="PDF файл"
@@ -340,6 +460,10 @@ class Publication(Orderable):
         FieldPanel('year'),
         FieldPanel('abstract'),
         FieldPanel('doi'),
+        FieldPanel('status'),
+        FieldPanel('group'),
+        FieldPanel('citation'),
+        FieldPanel('pdf_url'),
         FieldPanel('pdf_file'),
         FieldPanel('cover_image'),
     ]
@@ -347,7 +471,7 @@ class Publication(Orderable):
 
 # === 5. АВТОРСКИЙ КОЛЛЕКТИВ ===
 class TeamPage(FrontendUrlMixin, Page):
-    frontend_path = "/team"
+    frontend_path = "/materials#team"
 
     intro = RichTextField("Вводный текст", blank=True)
 
@@ -403,7 +527,7 @@ class TeamMember(Orderable):
 
 # === 6. БЛОГ ===
 class BlogIndexPage(FrontendUrlMixin, Page):
-    frontend_path = "/blog"
+    frontend_path = "/news"
 
     intro = RichTextField("Вводный текст", blank=True)
 
@@ -427,7 +551,7 @@ class BlogIndexPage(FrontendUrlMixin, Page):
 
 
 class BlogPost(FrontendUrlMixin, Page):
-    frontend_path = "/blog/{id}"
+    frontend_path = "/news/{id}"
 
     date = models.DateField("Дата публикации")
     body = RichTextField("Текст")
@@ -456,7 +580,7 @@ class BlogPost(FrontendUrlMixin, Page):
     parent_page_types = ['home.BlogIndexPage']
 
 
-class BlogGalleryImage(Orderable):
+class BlogGalleryImage(PhotoMeta, Orderable):
     page = ParentalKey(BlogPost, on_delete=models.CASCADE, related_name='blog_gallery')
     image = models.ForeignKey(
         'wagtailimages.Image', on_delete=models.CASCADE, related_name='+'
@@ -466,4 +590,71 @@ class BlogGalleryImage(Orderable):
     panels = [
         FieldPanel('image'),
         FieldPanel('caption'),
+    ] + PhotoMeta.meta_panels
+
+
+# === 7. РЕЗУЛЬТАТЫ И МАТЕРИАЛЫ ===
+class ReportPage(FrontendUrlMixin, Page):
+    """Страница из блоков: результаты года или материалы проекта."""
+
+    KIND_RESULTS = "results"
+    KIND_MATERIALS = "materials"
+
+    kind = models.CharField("Тип страницы", max_length=20, default=KIND_RESULTS, choices=[
+        (KIND_RESULTS, "Результаты года"), (KIND_MATERIALS, "Материалы проекта"),
+    ])
+    year = models.IntegerField("Год (для результатов)", null=True, blank=True)
+    city_label = models.CharField("Город года", max_length=100, blank=True)
+    status_label = models.CharField("Метка статуса", max_length=200, blank=True,
+                                    help_text="Например: 10 из 10 результатов выполнено")
+    intro = models.TextField("Вводный текст", blank=True)
+    summary = models.TextField("Кратко для главной", blank=True)
+    header_image = models.ForeignKey(
+        'wagtailimages.Image', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+', verbose_name="Изображение в шапке"
+    )
+    header_caption = models.CharField("Подпись к изображению", max_length=300, blank=True)
+    header_meta = models.CharField("Место и дата изображения", max_length=200, blank=True)
+    body = StreamField(ReportStreamBlock(), blank=True, verbose_name="Содержимое")
+
+    content_panels = Page.content_panels + [
+        MultiFieldPanel([
+            FieldPanel('kind'),
+            FieldPanel('year'),
+            FieldPanel('city_label'),
+            FieldPanel('status_label'),
+        ], heading="Тип и год"),
+        FieldPanel('intro'),
+        FieldPanel('summary'),
+        MultiFieldPanel([
+            FieldPanel('header_image'),
+            FieldPanel('header_caption'),
+            FieldPanel('header_meta'),
+        ], heading="Изображение в шапке"),
+        FieldPanel('body'),
     ]
+
+    api_fields = [
+        APIField('kind'),
+        APIField('year'),
+        APIField('city_label'),
+        APIField('status_label'),
+        APIField('intro'),
+        APIField('summary'),
+        APIField('header_image', serializer=ImageSerializedField()),
+        APIField('header_caption'),
+        APIField('header_meta'),
+        APIField('body'),
+    ]
+
+    parent_page_types = ['home.HomePage']
+    subpage_types = []
+
+    class Meta:
+        verbose_name = "Результаты или материалы"
+        verbose_name_plural = "Результаты и материалы"
+
+    def get_frontend_path(self) -> str | None:
+        if self.kind == self.KIND_MATERIALS:
+            return "/materials"
+        return f"/results/{self.year}" if self.year else "/results"
