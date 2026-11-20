@@ -65,7 +65,7 @@ export function PairChart({ value }) {
               <circle cx={x1} cy={y(s.start)} r="5" fill="#fff" stroke={c} strokeWidth="2.5" />
               <circle cx={x2} cy={y(s.end)} r="6" fill={c} />
               <text x={x1 - 12} y={y(s.start) + 5} textAnchor="end" fontSize="14" fontWeight="700" fill="#14242B">{fmt(s.start)}</text>
-              <text x={x2 + 12} y={y(s.end) + 5} fontSize="14" fontWeight="700" fill="#14242B">{fmt(s.end)} {s.unit}, {s.label}</text>
+              <text x={x2 + 12} y={y(s.end) + 5} fontSize="14" fontWeight="700" fill="#14242B">{fmt(s.end)}{s.unit ? ` ${s.unit}` : ''}, {s.label}</text>
             </g>
           );
         })}

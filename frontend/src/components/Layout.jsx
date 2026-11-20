@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { PinIcon } from './Icons';
+import { useRevealOnScroll } from '../lib/motion';
 
 const NAV = [
   { to: '/#about', label: 'О проекте', match: (p, h) => p === '/' && h === '#about' },
@@ -66,6 +67,7 @@ export function Footer() {
 
 export default function Layout() {
   const { pathname } = useLocation();
+  useRevealOnScroll();
   useEffect(() => {
     if (!window.location.hash) window.scrollTo(0, 0);
   }, [pathname]);

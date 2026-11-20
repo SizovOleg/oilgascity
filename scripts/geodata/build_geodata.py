@@ -22,6 +22,9 @@ from PIL import Image
 from rasterio.warp import Resampling, calculate_default_transform, reproject, transform_bounds
 from shapely.geometry import mapping
 
+sys.path.insert(0, str(Path(__file__).parent))
+from housing import housing_tab  # noqa: E402
+
 warnings.filterwarnings("ignore", category=UserWarning)
 
 UTM = "EPSG:32643"
@@ -185,7 +188,7 @@ def match_expr(field: str, palette: dict) -> list:
     return expr + ["#cccccc"]
 
 
-def build(src: Path, out: Path) -> None:
+def build(src: Path, out: Path, housing_root: Path | None = None) -> None:
     manifest = {"version": 1, "cities": []}
 
     # ------------------------------------------------------------ Муравленко
@@ -326,8 +329,19 @@ def build(src: Path, out: Path) -> None:
         ],
     })
 
+    # Вкладки: слои статей и (если передан проект housing-yanao) возраст жилого фонда
+    housing_props = ["address", "year", "decade", "floors", "apartments", "area", "house_type", "condition", "source", "src"]
+    for city in manifest["cities"]:
+        tabs = [{"id": "green", "title": "Зелёная инфраструктура", "groups": city.pop("groups")}]
+        if housing_root:
+            print(f"Жилой фонд: {city['title']}")
+            tabs.append(housing_tab(housing_root, city["slug"], out / city["slug"],
+                                    lambda g, p: to_geojson(g, p, housing_props, 0)))
+        city["tabs"] = tabs
+
     (out / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8")
-    print(f"manifest.json: {sum(len(g['layers']) for c in manifest['cities'] for g in c['groups'])} слоёв")
+    n = sum(len(g["layers"]) for c in manifest["cities"] for t in c["tabs"] for g in t["groups"])
+    print(f"manifest.json: {n} слоёв")
 
 
 def bounds_of(gdf: gpd.GeoDataFrame) -> list[list[float]]:
@@ -352,4 +366,5 @@ def layer(lid: str, title: str, kind: str, color, *, default: bool = False, lege
 
 
 if __name__ == "__main__":
-    build(Path(sys.argv[1]), Path(sys.argv[2]))
+    # третий необязательный аргумент: корень проекта housing-yanao с выгрузками жилого фонда
+    build(Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]) if len(sys.argv) > 3 else None)

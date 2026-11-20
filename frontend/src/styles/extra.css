@@ -63,7 +63,79 @@
 .post-date { margin: 0.9rem 0 0; }
 .sheet-title { font-size: clamp(1.6rem, 3.6vw, 2.4rem); margin-bottom: 1rem; }
 
+/* ---------- Цель и задачи: карточки, лента шагов, ключевые слова ---------- */
+.goal-grid { display: grid; grid-template-columns: 5fr 4fr 3fr; gap: 0.6rem; }
+.goal-card { background: var(--fog); padding: 1.4rem 1.5rem 1.5rem; position: relative; overflow: hidden; transition: transform 0.35s ease, box-shadow 0.35s ease; }
+.goal-card::before { content: ""; position: absolute; left: 0; top: 0; height: 4px; width: 0; background: var(--tape); transition: width 0.6s ease; }
+.goal-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(20, 36, 43, 0.12); }
+.goal-card:hover::before, .goal-card.rv-in::before { width: 100%; }
+.goal-card.main { background: var(--pine); color: #fff; }
+.goal-card.main p { font-size: 1.3rem; line-height: 1.4; font-weight: 500; letter-spacing: -0.01em; }
+.goal-card p { margin: 0; font-size: 0.95rem; }
+.kicker { display: block; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tape); margin-bottom: 0.6rem; }
+.goal-card.main .kicker { color: var(--sand); }
+.tasks { margin-top: 2.4rem; }
+.tasks .sub { font-size: 1.45rem; margin-bottom: 1.2rem; }
+.steps { list-style: none; margin: 0 0 0.8rem; padding: 0; display: grid; grid-template-columns: repeat(var(--n, 5), 1fr); gap: 0.6rem; position: relative; counter-reset: none; }
+.steps::before { content: ""; position: absolute; left: 0; right: 0; top: 1.35rem; height: 2px; background: var(--line); }
+.step { position: relative; padding: 0 0.4rem 0 0; }
+.step::after { content: ""; position: absolute; left: 0; top: 1.35rem; height: 2px; width: 0; background: var(--tape); transition: width 0.9s ease; }
+.step.rv-in::after, .step:hover::after { width: 100%; }
+.step-n { position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center; width: 2.7rem; height: 2.7rem; border-radius: 50%; background: var(--snow); border: 2px solid var(--ink); font-weight: 800; font-size: 0.95rem; transition: background 0.3s, color 0.3s, transform 0.3s; }
+.step:hover .step-n { background: var(--tape); border-color: var(--tape); color: #fff; transform: scale(1.08); }
+.step p { margin: 0.8rem 0 0; font-size: 0.9rem; line-height: 1.45; }
+.kw-row { margin-top: 2rem; display: grid; gap: 0.8rem; }
+.kw-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.kw-chips li { font-size: 0.8rem; padding: 0.35rem 0.75rem; border-radius: 999px; border: 1.5px solid var(--ink); background: var(--snow); transition: background 0.25s, color 0.25s; }
+.kw-chips li:hover { background: var(--ink); color: #fff; }
+.kw-en { margin-top: 0.6rem; }
+.about-links { margin: 0; }
+
+/* Результаты по годам: два полноценных года рядом */
+.years.two { grid-template-columns: 1fr 1fr; }
+.years.two .ten { grid-template-columns: 1fr; }
+.ten li.pending b { color: var(--mute); font-weight: 500; }
+
+/* Первый экран: заголовок «Нефтегазовый город» в одну строку на компьютере, кадр выше центра */
+.cover:not(.city-cover) .cover-plate h1 { font-size: clamp(2.1rem, 4.6vw, 3.8rem); }
+.cover > img.hero-img { object-position: center 18%; }
+.city-cover > img { object-position: center 28%; }
+@media (prefers-reduced-motion: no-preference) {
+  .cover > img.hero-img { animation: hero-zoom 18s ease-out both; }
+  @keyframes hero-zoom { from { transform: scale(1.06); } to { transform: scale(1); } }
+  .cover { overflow: hidden; }
+
+  /* Проявление при прокрутке: блок чуть приподнимается и проясняется, но не прячется полностью */
+  .rv { opacity: 0.35; transform: translateY(18px); transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1); }
+  .rv.rv-in { opacity: 1; transform: none; }
+  .steps .step.rv:nth-child(2) { transition-delay: 0.08s; }
+  .steps .step.rv:nth-child(3) { transition-delay: 0.16s; }
+  .steps .step.rv:nth-child(4) { transition-delay: 0.24s; }
+  .steps .step.rv:nth-child(5) { transition-delay: 0.32s; }
+  .kw-chips li { animation: chip-in 0.5s ease both; animation-delay: calc(var(--i, 0) * 40ms); }
+  @keyframes chip-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+}
+
+/* Отклик на наведение */
+.door img, .shelf img, .log-lead img { transition: transform 0.6s ease; }
+.door:hover img, .shelf:hover img, .log-lead a:hover img { transform: scale(1.04); }
+.shelf { transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s; }
+.shelf:hover { transform: translateY(-3px); box-shadow: 0 10px 22px rgba(20, 36, 43, 0.1); }
+.shelf.photo { overflow: hidden; }
+.res { transition: background 0.3s; }
+.res:hover { background: linear-gradient(90deg, rgba(238, 241, 239, 0.7), transparent 70%); }
+.ten li { transition: padding-left 0.25s; }
+.ten li:hover { padding-left: 0.3rem; }
+
 @media (max-width: 900px) {
+  .goal-grid { grid-template-columns: 1fr; }
+  .goal-card.main p { font-size: 1.12rem; }
+  .steps { grid-template-columns: 1fr; gap: 0; }
+  .steps::before { left: 1.35rem; right: auto; top: 0; bottom: 0; width: 2px; height: auto; }
+  .step { display: grid; grid-template-columns: 2.7rem 1fr; gap: 0.9rem; padding: 0 0 1rem; }
+  .step::after { display: none; }
+  .step p { margin: 0.5rem 0 0; }
+  .years.two { grid-template-columns: 1fr; }
   .goal p:first-child { font-size: 1.15rem; }
   .news-list li { grid-template-columns: 6rem 1fr; gap: 0.9rem; }
   .news-list img, .news-list .noimg { width: 6rem; height: 6rem; }

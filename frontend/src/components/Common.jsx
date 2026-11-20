@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PinIcon } from './Icons';
 import { inline } from '../lib/format';
+import { CountUp } from './Motion';
 
 export function Html({ html, className, as = 'div' }) {
   const Tag = as;
@@ -109,7 +110,7 @@ export function Stats({ items, className = 'figures' }) {
   return (
     <ul className={className}>
       {items.map((s, i) => (
-        <li key={i}><b>{s.value}</b>{s.label}{s.note ? <span className="src">{s.note}</span> : null}</li>
+        <li key={i}><b><CountUp text={s.value} /></b>{s.label}{s.note ? <span className="src">{s.note}</span> : null}</li>
       ))}
     </ul>
   );

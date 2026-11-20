@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { api, useData } from '../lib/api';
 import { useHashScroll, useTitle } from '../lib/hooks';
@@ -16,7 +17,11 @@ function NoBreakGrant({ text }) {
 function Cover({ home }) {
   return (
     <section className="cover">
-      {home.header_image ? <img src={home.header_image.large} alt={home.header_caption || ''} /> : null}
+      {home.header_image ? (
+        <img className="hero-img" src={home.header_image.large}
+          srcSet={`${home.header_image.large} 1200w, ${home.header_image.original} 2400w`} sizes="100vw"
+          alt={home.header_caption || ''} />
+      ) : null}
       <div className="wrap cover-wrap">
         <div className="cover-plate">
           <h1>{home.hero_title || home.title}</h1>
@@ -30,36 +35,62 @@ function Cover({ home }) {
   );
 }
 
+// Абзацы и пункты из HTML редактора CMS: текст без тегов и без подписи вида «Новизна:»
+function htmlParts(html, selector) {
+  if (!html) return [];
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  return [...doc.querySelectorAll(selector)].map((el) => el.textContent.trim()).filter(Boolean);
+}
+const stripLabel = (t) => t.replace(/^[^:]{2,40}:\s*/, '');
+const capital = (t) => t.charAt(0).toUpperCase() + t.slice(1).replace(/[;.]\s*$/, '.');
+const GOAL_KICKERS = ['Цель проекта', 'Почему это важно', 'Научная новизна'];
+
 function About({ home }) {
-  const kwRu = home.keywords_ru;
+  const goal = useMemo(() => htmlParts(home.goal, 'p'), [home.goal]);
+  const tasks = useMemo(() => htmlParts(home.expected_results, 'li'), [home.expected_results]);
+  const keywords = (home.keywords_ru || '').split(',').map((k) => k.trim()).filter(Boolean);
   return (
     <section className="part" id="about">
       <div className="wrap">
         <div className="part-head"><h2>Цель и задачи</h2></div>
-        <div className="about">
-          <div>
-            <Html html={home.goal} className="goal" />
-            <p className="small">
-              <Link className="more" to="/materials#team">Авторский коллектив</Link>, <Link className="more" to="/materials#expeditions">экспедиции</Link>, <Link className="more" to="/results/2025#methods">методы и данные</Link>
-            </p>
-          </div>
-          <div>
-            <h3 className="sub">Ожидаемые результаты проекта</h3>
-            <Html html={home.expected_results} className="expect-html" />
+        <div className="goal-grid">
+          {goal.map((text, i) => (
+            <article key={i} className={`goal-card${i === 0 ? ' main' : ''}`}>
+              <span className="kicker">{GOAL_KICKERS[i] || ''}</span>
+              <p>{i === 0 || i === 2 ? capital(stripLabel(text)) : text}</p>
+            </article>
+          ))}
+        </div>
+        {tasks.length ? (
+          <div className="tasks">
+            <h3 className="sub">Задачи: что даст проект</h3>
+            <ol className="steps" style={{ '--n': tasks.length }}>
+              {tasks.map((t, i) => (
+                <li key={i} className="step">
+                  <span className="step-n">{String(i + 1).padStart(2, '0')}</span>
+                  <p>{capital(t)}</p>
+                </li>
+              ))}
+            </ol>
             {home.expected_source ? <p className="src">{home.expected_source}</p> : null}
-            {kwRu ? (
-              <dl className="kw">
-                <dt>Ключевые слова</dt><dd>{kwRu}</dd>
-                {home.keywords_en ? <><dt lang="en">Keywords</dt><dd lang="en">{home.keywords_en}</dd></> : null}
-              </dl>
-            ) : null}
-            {home.abstract_en ? (
-              <details className="en" lang="en">
-                <summary>Abstract in English</summary>
-                <Html html={home.abstract_en} />
-              </details>
-            ) : null}
           </div>
+        ) : null}
+        <div className="kw-row">
+          {keywords.length ? (
+            <ul className="kw-chips" aria-label="Ключевые слова">
+              {keywords.map((k, i) => <li key={k} style={{ '--i': i }}>{k}</li>)}
+            </ul>
+          ) : null}
+          {home.abstract_en ? (
+            <details className="en" lang="en">
+              <summary>Abstract and keywords in English</summary>
+              <Html html={home.abstract_en} />
+              {home.keywords_en ? <p className="kw-en"><b>Keywords:</b> {home.keywords_en}</p> : null}
+            </details>
+          ) : null}
+          <p className="small about-links">
+            <Link className="more" to="/materials#team">Авторский коллектив</Link>, <Link className="more" to="/materials#expeditions">экспедиции</Link>, <Link className="more" to="/results/2025#methods">методы и данные</Link>
+          </p>
         </div>
       </div>
     </section>
@@ -69,6 +100,7 @@ function About({ home }) {
 function Years({ home, reports }) {
   const years = reports.filter((r) => r.kind === 'results').sort((a, b) => a.year - b.year);
   if (!years.length) return null;
+  const withResults = years.filter((r) => (r.body || []).some((b) => b.type === 'result')).length;
   return (
     <section className="part fog" id="years">
       <div className="wrap">
@@ -76,7 +108,7 @@ function Years({ home, reports }) {
           <h2>Результаты по годам</h2>
           {home.years_intro ? <p>{home.years_intro}</p> : null}
         </div>
-        <div className="years">
+        <div className={`years${withResults > 1 ? ' two' : ''}`}>
           {years.map((r) => {
             const results = (r.body || []).filter((b) => b.type === 'result').map((b) => b.value);
             if (!results.length) {
@@ -89,15 +121,18 @@ function Years({ home, reports }) {
                 </div>
               );
             }
+            const allDone = results.every((x) => x.status === 'done');
             return (
               <div className="year" key={r.id}>
                 <div className="year-head">
                   <h3>{r.year}</h3><span>{r.city_label}</span>
-                  {r.status_label ? <span className="chip done">{r.status_label}</span> : null}
+                  {r.status_label ? <span className={`chip ${allDone ? 'done' : 'wait'}`}>{r.status_label}</span> : null}
                 </div>
                 <ol className="ten">
                   {results.map((x) => (
-                    <li key={x.number}><Link to={`/results/${r.year}#r${x.number}`}>{x.short_title}</Link><b>{x.headline}</b></li>
+                    <li key={x.number} className={x.status === 'progress' ? 'pending' : ''}>
+                      <Link to={`/results/${r.year}#r${x.number}`}>{x.short_title}</Link><b>{x.headline}</b>
+                    </li>
                   ))}
                 </ol>
                 <p className="src" style={{ margin: '0.9rem 0 1rem' }}>Источник: отчёт о выполнении проекта в {r.year} году. Пояснения к цифрам на странице результатов.</p>

@@ -1,6 +1,6 @@
-// Геопортал: полноэкранная карта MapLibre со слоями по картам статей проекта.
-// Состав слоёв, стили и легенды приходят из /geodata/manifest.json (scripts/geodata/build_geodata.py),
-// поэтому новый слой добавляется без правки этого кода.
+// Геопортал: полноэкранная карта MapLibre со слоями по картам статей проекта и вкладкой жилого фонда.
+// Состав вкладок, слоёв, стили, легенды и графики приходят из /geodata/manifest.json
+// (scripts/geodata/build_geodata.py), поэтому новый слой добавляется без правки этого кода.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import * as maplibregl from 'maplibre-gl';
@@ -39,17 +39,23 @@ const BASEMAPS = {
 const FIELD_LABELS = {
   kind: 'Тип', area_ha: 'Площадь, га', address: 'Адрес', floors: 'Этажей', apartments: 'Квартир',
   year: 'Год постройки', condition: 'Состояние', type: 'Тип дома', people: 'Жителей (оценка)',
-  formation: 'Формация', community: 'Сообщество', zone: 'Зона',
+  formation: 'Формация', community: 'Сообщество', zone: 'Зона', area: 'Жилая площадь, м²',
+  house_type: 'Тип', source: 'Контур',
 };
 
 const layerKey = (city, id) => `${city}-${id}`;
+const fmt = (v) => (typeof v === 'number' ? String(v).replace('.', ',') : v);
+
+// Старый манифест без вкладок читается как одна вкладка
+const tabsOf = (city) => city.tabs || [{ id: 'green', title: 'Слои', groups: city.groups || [] }];
+const layersOf = (tab) => tab.groups.flatMap((g) => g.layers);
 
 function popupHtml(layer, props) {
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const rows = (layer.popup || []).filter((f) => props[f] !== null && props[f] !== undefined && props[f] !== '' && props[f] !== 'None');
+  const rows = (layer.popup || []).filter((f) => props[f] !== null && props[f] !== undefined && props[f] !== '' && props[f] !== 'None' && props[f] !== 'null');
   const title = rows.find((f) => f === 'name' || f === 'address' || f === 'formation');
   const body = rows.filter((f) => f !== title)
-    .map((f) => `<div><span>${FIELD_LABELS[f] || f}</span> ${esc(props[f])}</div>`).join('');
+    .map((f) => `<div><span>${FIELD_LABELS[f] || f}</span> ${esc(fmt(props[f]))}</div>`).join('');
   return `<div class="gp-pop"><b>${esc(title ? props[title] : layer.title)}</b>${body}<small>${esc(layer.title)}</small></div>`;
 }
 
@@ -101,19 +107,54 @@ function addLayer(map, city, layer) {
   for (const l of styleLayers(city, layer)) if (!map.getLayer(l.id)) map.addLayer(l);
 }
 
-function setVisible(map, city, layer, visible) {
+function setVisible(map, city, layer, visible, filter) {
   for (const l of styleLayers(city, layer)) {
-    if (map.getLayer(l.id)) map.setLayoutProperty(l.id, 'visibility', visible ? 'visible' : 'none');
+    if (!map.getLayer(l.id)) continue;
+    map.setLayoutProperty(l.id, 'visibility', visible ? 'visible' : 'none');
+    // фильтр по значению поля (например, десятилетию постройки) у слоёв, которые его поддерживают
+    if (layer.filter) map.setFilter(l.id, filter ? ['==', ['get', layer.filter], filter] : null);
   }
 }
 
-function Legend({ layer }) {
+function Legend({ layer, filter, onFilter }) {
   const items = layer.legend || (typeof layer.color === 'string' ? [{ label: layer.title, color: layer.color }] : []);
   if (!items.length) return null;
   return (
     <ul className="gp-legend">
-      {items.map((it, i) => <li key={i}><i style={{ background: it.color }} />{it.label}</li>)}
+      {items.map((it, i) => (
+        <li key={i}>
+          {layer.filter ? (
+            <button type="button" className={filter === it.label ? 'on' : ''} aria-pressed={filter === it.label}
+              onClick={() => onFilter(filter === it.label ? null : it.label)}>
+              <i style={{ background: it.color }} />{it.label}
+            </button>
+          ) : <><i style={{ background: it.color }} />{it.label}</>}
+        </li>
+      ))}
     </ul>
+  );
+}
+
+// График «Когда строился город»: столбцы по десятилетиям, щелчок выбирает дома десятилетия на карте
+function DecadeChart({ chart, filter, onFilter }) {
+  const max = Math.max(...chart.bars.map((b) => b.value), 1);
+  return (
+    <figure className="gp-chart">
+      <figcaption><b>{chart.title}</b><span>{chart.unit}</span></figcaption>
+      <div className="gp-bars" role="group" aria-label={chart.title}>
+        {chart.bars.map((b) => (
+          <button key={b.label} type="button" aria-pressed={filter === b.label}
+            className={filter && filter !== b.label ? 'dim' : ''}
+            onClick={() => onFilter(filter === b.label ? null : b.label)}
+            title={`${b.label}: ${fmt(b.value)} тыс. м², ${b.count} домов`}>
+            <span className="v">{fmt(b.value)}</span>
+            <span className="bar" style={{ height: `${Math.max(3, (b.value / max) * 100)}%`, background: b.color }} />
+            <span className="l">{b.label}</span>
+          </button>
+        ))}
+      </div>
+      <p className="gp-note">{chart.note} Щелчок по столбцу показывает дома этого десятилетия.</p>
+    </figure>
   );
 }
 
@@ -123,11 +164,14 @@ export default function Geoportal() {
   const [error, setError] = useState(null);
   const [basemap, setBasemap] = useState('scheme');
   const [visible, setVisibleState] = useState({});
+  const [filter, setFilter] = useState(null);
   const [panelOpen, setPanelOpen] = useState(() => !window.matchMedia('(max-width: 760px)').matches);
   const mapRef = useRef(null);
   const boxRef = useRef(null);
   const citySlug = params.get('city') || 'muravlenko';
   const city = useMemo(() => manifest?.cities.find((c) => c.slug === citySlug) || manifest?.cities[0], [manifest, citySlug]);
+  const tabs = city ? tabsOf(city) : [];
+  const tab = tabs.find((t) => t.id === params.get('tab')) || tabs[0];
 
   useEffect(() => { document.title = 'Геопортал. OilGasCity'; }, []);
 
@@ -136,7 +180,7 @@ export default function Geoportal() {
       .then((r) => { if (!r.ok) throw new Error(`manifest ${r.status}`); return r.json(); })
       .then((m) => {
         const v = {};
-        for (const c of m.cities) for (const g of c.groups) for (const l of g.layers) v[layerKey(c.slug, l.id)] = Boolean(l.default);
+        for (const c of m.cities) for (const t of tabsOf(c)) for (const l of layersOf(t)) v[layerKey(c.slug, l.id)] = Boolean(l.default);
         setVisibleState(v);
         setManifest(m);
       })
@@ -162,17 +206,17 @@ export default function Geoportal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manifest]);
 
-  // слои текущего города: добавить включённые, синхронизировать видимость
+  // видны только включённые слои текущего города и текущей вкладки
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !city) return undefined;
+    if (!map || !city || !tab) return undefined;
     const sync = () => {
       for (const c of manifest.cities) {
-        for (const g of c.groups) {
-          for (const l of g.layers) {
-            const on = c.slug === city.slug && visible[layerKey(c.slug, l.id)];
+        for (const t of tabsOf(c)) {
+          for (const l of layersOf(t)) {
+            const on = c.slug === city.slug && t.id === tab.id && visible[layerKey(c.slug, l.id)];
             if (on) addLayer(map, c.slug, l);
-            setVisible(map, c.slug, l, on);
+            setVisible(map, c.slug, l, on, filter);
           }
         }
       }
@@ -180,32 +224,33 @@ export default function Geoportal() {
     if (map.isStyleLoaded()) sync();
     map.on('style.load', sync);
     return () => map.off('style.load', sync);
-  }, [city, visible, manifest]);
+  }, [city, tab, visible, manifest, filter]);
 
   // подписи по щелчку
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !city) return undefined;
-    const layers = city.groups.flatMap((g) => g.layers).filter((l) => l.popup);
+    if (!map || !city || !tab) return undefined;
+    const layers = layersOf(tab).filter((l) => l.popup);
     const ids = layers.flatMap((l) => {
       const base = layerKey(city.slug, l.id);
       return l.type === 'fill' ? [`${base}-fill`] : [base];
     });
+    const present = () => ids.filter((id) => map.getLayer(id) && map.getLayoutProperty(id, 'visibility') !== 'none');
     const onClick = (e) => {
-      const hits = map.queryRenderedFeatures(e.point, { layers: ids.filter((id) => map.getLayer(id)) });
+      const hits = map.queryRenderedFeatures(e.point, { layers: present() });
       if (!hits.length) return;
       const hit = hits[0];
-      const layer = layers.find((l) => hit.layer.id.startsWith(layerKey(city.slug, l.id)));
+      const layer = layers.find((l) => hit.layer.id === layerKey(city.slug, l.id) || hit.layer.id === `${layerKey(city.slug, l.id)}-fill`);
       new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(e.lngLat).setHTML(popupHtml(layer, hit.properties)).addTo(map);
     };
     const onMove = (e) => {
-      const n = map.queryRenderedFeatures(e.point, { layers: ids.filter((id) => map.getLayer(id)) }).length;
+      const n = map.queryRenderedFeatures(e.point, { layers: present() }).length;
       map.getCanvas().style.cursor = n ? 'pointer' : '';
     };
     map.on('click', onClick);
     map.on('mousemove', onMove);
     return () => { map.off('click', onClick); map.off('mousemove', onMove); };
-  }, [city, visible]);
+  }, [city, tab, visible]);
 
   // смена города: перелёт к его границам
   useEffect(() => {
@@ -213,6 +258,13 @@ export default function Geoportal() {
     if (map && city) map.fitBounds(city.bounds, { padding: 40, duration: 900 });
   }, [city]);
 
+  const go = (next) => {
+    setFilter(null);
+    const p = { city: next.city ?? city.slug };
+    const t = next.tab ?? tab?.id;
+    if (t && t !== tabsOf(city)[0].id) p.tab = t;
+    setParams(p);
+  };
   const switchBasemap = (key) => {
     if (key === basemap || !mapRef.current) return;
     setBasemap(key);
@@ -229,7 +281,7 @@ export default function Geoportal() {
           <nav className="gp-cities" aria-label="Город">
             {manifest.cities.map((c) => (
               <button key={c.slug} type="button" aria-pressed={c.slug === city?.slug}
-                onClick={() => setParams({ city: c.slug })}>{c.title}</button>
+                onClick={() => go({ city: c.slug })}>{c.title}</button>
             ))}
           </nav>
         ) : null}
@@ -238,19 +290,30 @@ export default function Geoportal() {
         </button>
       </header>
       <div className="gp-body">
-        {panelOpen && city ? (
+        {panelOpen && city && tab ? (
           <aside className="gp-panel" aria-label="Слои карты">
             <div className="gp-city">
               <h2>{city.title}</h2>
               <p className="gp-region">{city.region}</p>
-              <p className="gp-about">{city.about}</p>
             </div>
+            {tabs.length > 1 ? (
+              <div className="gp-tabs" role="tablist" aria-label="Тема карты">
+                {tabs.map((t) => (
+                  <button key={t.id} type="button" role="tab" aria-selected={t.id === tab.id} onClick={() => go({ tab: t.id })}>{t.title}</button>
+                ))}
+              </div>
+            ) : null}
+            <p className="gp-about">{tab.about || city.about}</p>
+            {tab.facts?.length ? (
+              <ul className="gp-facts">{tab.facts.map((f, i) => <li key={i}><b>{f.value}</b>{f.label}</li>)}</ul>
+            ) : null}
+            {tab.chart ? <DecadeChart chart={tab.chart} filter={filter} onFilter={setFilter} /> : null}
             <div className="gp-base" role="group" aria-label="Подложка">
               {Object.entries(BASEMAPS).map(([k, b]) => (
                 <button key={k} type="button" aria-pressed={k === basemap} onClick={() => switchBasemap(k)}>{b.title}</button>
               ))}
             </div>
-            {city.groups.map((g) => (
+            {tab.groups.map((g) => (
               <section className="gp-group" key={g.title}>
                 <h3>{g.title}</h3>
                 {g.note ? <p className="gp-note">{g.note}</p> : null}
@@ -262,14 +325,15 @@ export default function Geoportal() {
                         <input type="checkbox" checked={Boolean(visible[id])} onChange={() => toggle(id)} />
                         {l.title}
                       </label>
-                      {visible[id] ? <Legend layer={l} /> : null}
+                      {visible[id] ? <Legend layer={l} filter={filter} onFilter={setFilter} /> : null}
                       {visible[id] && l.note ? <p className="gp-note">{l.note}</p> : null}
                     </div>
                   );
                 })}
               </section>
             ))}
-            <p className="gp-source">Источник: {city.source}. <Link to={`/cities/${city.slug}`}>Страница города</Link>, <Link to="/materials#maps">карты в материалах</Link>.</p>
+            {filter ? <p className="gp-filter">Показаны дома: {filter}. <button type="button" onClick={() => setFilter(null)}>Показать все</button></p> : null}
+            <p className="gp-source">Источник: {tab.source || city.source}. <Link to={`/cities/${city.slug}`}>Страница города</Link>, <Link to="/materials#maps">карты в материалах</Link>.</p>
           </aside>
         ) : null}
         <div className="gp-map" ref={boxRef}>
