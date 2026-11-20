@@ -180,13 +180,14 @@ function labelLayer(id, src, field) {
   };
 }
 
-function addLayer(map, city, layer) {
+// ver: «?v=<метка сборки манифеста>», новая сборка геоданных не берётся из кэша браузера
+function addLayer(map, city, layer, ver = '') {
   const id = layerKey(city, layer.id);
   if (!map.getSource(id)) {
     if (layer.type === 'image') {
-      map.addSource(id, { type: 'image', url: `${DATA}/${city}/${layer.file}`, coordinates: layer.coordinates });
+      map.addSource(id, { type: 'image', url: `${DATA}/${city}/${layer.file}${ver}`, coordinates: layer.coordinates });
     } else {
-      map.addSource(id, { type: 'geojson', data: `${DATA}/${city}/${layer.file}` });
+      map.addSource(id, { type: 'geojson', data: `${DATA}/${city}/${layer.file}${ver}` });
     }
   }
   for (const l of styleLayers(city, layer)) if (!map.getLayer(l.id)) map.addLayer(l);
@@ -324,6 +325,7 @@ export default function Geoportal() {
   const city = useMemo(() => manifest?.cities.find((c) => c.slug === citySlug) || manifest?.cities[0], [manifest, citySlug]);
   const tabs = city ? tabsOf(city) : [];
   const tab = tabs.find((t) => t.id === params.get('tab')) || tabs[0];
+  const ver = manifest?.built ? `?v=${manifest.built}` : '';
   const prod = scene && city && scene.city === city.slug ? city.imagery?.find((p) => p.id === scene.id) : null;
   const comp = prod ? prod.composites.find((c) => c.id === scene.comp) || prod.composites[0] : null;
 
@@ -378,7 +380,7 @@ export default function Geoportal() {
         for (const t of tabsOf(c)) {
           for (const l of layersOf(t)) {
             const on = c.slug === city.slug && t.id === tab.id && visible[layerKey(c.slug, l.id)] && !(bare && prod);
-            if (on) addLayer(map, c.slug, l);
+            if (on) addLayer(map, c.slug, l, ver);
             setVisible(map, c.slug, l, on, filter);
           }
         }
@@ -388,7 +390,7 @@ export default function Geoportal() {
     if (map.isStyleLoaded()) sync(); else map.once('idle', sync);
     map.on('style.load', sync);
     return () => { map.off('style.load', sync); map.off('idle', sync); };
-  }, [city, tab, visible, manifest, filter, bare, prod]);
+  }, [city, tab, visible, manifest, filter, bare, prod, ver]);
 
   // снимок проекта: один продукт и один синтез за раз, растр под векторными слоями города
   useEffect(() => {
@@ -425,11 +427,11 @@ export default function Geoportal() {
   // фото площадок и парков текущего города (photos.json из scripts/geodata/photos.py)
   useEffect(() => {
     if (!city?.photos || photos[city.slug]) return;
-    fetch(`${DATA}/${city.slug}/${city.photos}`, { cache: 'no-cache' })
+    fetch(`${DATA}/${city.slug}/${city.photos}${ver}`)
       .then((r) => (r.ok ? r.json() : {}))
       .then((p) => setPhotos((all) => ({ ...all, [city.slug]: p })))
       .catch((e) => console.error(e));
-  }, [city, photos]);
+  }, [city, photos, ver]);
 
   // подписи по щелчку
   useEffect(() => {

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime, timezone
 import sys
 import warnings
 from pathlib import Path
@@ -227,7 +228,8 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
           imagery_index: Path | None = None) -> None:
     photos = json.loads(photos_index.read_text(encoding="utf-8")) if photos_index else {}
     imagery = json.loads(imagery_index.read_text(encoding="utf-8")) if imagery_index else {}
-    manifest = {"version": 1, "cities": []}
+    # built: метка сборки; геопортал добавляет её к адресам слоёв (?v=...), чтобы браузер не держал старые файлы
+    manifest = {"version": 1, "built": datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S"), "cities": []}
 
     # ------------------------------------------------------------ Муравленко
     print("Муравленко")
