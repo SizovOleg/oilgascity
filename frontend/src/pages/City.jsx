@@ -14,7 +14,7 @@ function FactsRow({ city }) {
   const people = splitFigure(city.population);
   const facts = [];
   if (founded.value) facts.push([founded.value, `год основания${founded.rest ? `, ${founded.rest.replace(/[()]/g, '')}` : ''}`]);
-  if (people.value) facts.push([people.value, `жителей ${people.rest}`.trim()]);
+  if (people.value) facts.push([people.value, `жителей ${people.rest.replace(/^чел\.?\s*/, '')}`.trim()]);
   const interviews = row('Интервью');
   if (interviews) {
     const s = splitFigure(interviews);

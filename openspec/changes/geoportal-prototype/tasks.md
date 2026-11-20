@@ -11,6 +11,6 @@
 
 ## 3. Выкатка
 
-- [ ] 3.1 Каталог `/opt/oilgascity-geodata` на сервере, загрузка данных
-- [ ] 3.2 nginx: location `/geodata/` с gzip; копия конфига, `nginx -t`, reload
-- [ ] 3.3 Проверка на живом сайте
+- [x] 3.1 Каталог `/opt/oilgascity-geodata` на сервере, загрузка данных
+- [x] 3.2 nginx: location `/geodata/` с gzip; копия конфига, `nginx -t`, reload
+- [x] 3.3 Проверка на живом сайте
