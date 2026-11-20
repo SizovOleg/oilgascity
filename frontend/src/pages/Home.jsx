@@ -43,6 +43,18 @@ function htmlParts(html, selector) {
 }
 const stripLabel = (t) => t.replace(/^[^:]{2,40}:\s*/, '');
 const capital = (t) => t.charAt(0).toUpperCase() + t.slice(1).replace(/[;.]\s*$/, '.');
+
+// Короткое название задачи для заголовка раскрываемого блока: без скобок, до двоеточия,
+// а у длинных формулировок до первой запятой
+function shortTask(text) {
+  let t = text.replace(/\s*\([^)]*\)/g, '').replace(/[;.]\s*$/, '');
+  t = t.split(':')[0];
+  if (t.length > 90) {
+    const comma = t.indexOf(', ', 30);
+    if (comma > 0) t = t.slice(0, comma);
+  }
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
 const GOAL_KICKERS = ['Цель проекта', 'Почему это важно', 'Научная новизна'];
 
 function About({ home }) {
@@ -64,11 +76,16 @@ function About({ home }) {
         {tasks.length ? (
           <div className="tasks">
             <h3 className="sub">Задачи: что даст проект</h3>
-            <ol className="steps" style={{ '--n': tasks.length }}>
+            <ol className="task-list">
               {tasks.map((t, i) => (
                 <li key={i} className="step">
-                  <span className="step-n">{String(i + 1).padStart(2, '0')}</span>
-                  <p>{capital(t)}</p>
+                  <details>
+                    <summary>
+                      <span className="step-n">{String(i + 1).padStart(2, '0')}</span>
+                      <span className="task-title">{shortTask(t)}</span>
+                    </summary>
+                    <p>{capital(t)}</p>
+                  </details>
                 </li>
               ))}
             </ol>
