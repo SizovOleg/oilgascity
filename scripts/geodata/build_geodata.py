@@ -11,12 +11,14 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import warnings
 from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 import rasterio
 from PIL import Image
 from rasterio.warp import Resampling, calculate_default_transform, reproject, transform_bounds
@@ -188,7 +190,26 @@ def match_expr(field: str, palette: dict) -> list:
     return expr + ["#cccccc"]
 
 
-def build(src: Path, out: Path, housing_root: Path | None = None) -> None:
+def slug(text: str) -> str:
+    """Латинский ключ из названия; совпадает с ключами в scripts/geodata/photos.py."""
+    table = str.maketrans("абвгдеёжзийклмнопрстуфхцчшщъыьэюя", "abvgdeejziiklmnoprstufhccss_y_eua")
+    return re.sub(r"[^a-z0-9]+", "-", text.lower().translate(table)).strip("-")
+
+
+def write_open_spaces(open_sp: gpd.GeoDataFrame, d: Path, photos: dict) -> None:
+    """Слой открытых пространств с числом фото у объекта и файл photos.json для карусели."""
+    open_sp = open_sp.copy()
+    open_sp["photos"] = open_sp["fid"].map(lambda f: len(photos.get(f, {}).get("items", [])) if f else 0)
+    to_geojson(open_sp, d / "open_spaces.json", ["name", "kind", "group", "fid", "photos"], 0.3)
+    if photos:
+        (d / "photos.json").write_text(json.dumps(photos, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        print(f"  photos.json: {len(photos)} объектов, {sum(len(g['items']) for g in photos.values())} снимков")
+
+
+def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: Path | None = None,
+          imagery_index: Path | None = None) -> None:
+    photos = json.loads(photos_index.read_text(encoding="utf-8")) if photos_index else {}
+    imagery = json.loads(imagery_index.read_text(encoding="utf-8")) if imagery_index else {}
     manifest = {"version": 1, "cities": []}
 
     # ------------------------------------------------------------ Муравленко
@@ -204,7 +225,12 @@ def build(src: Path, out: Path, housing_root: Path | None = None) -> None:
     open_sp["kind"] = open_sp["fclass"].map(OPEN_KINDS).fillna(open_sp["fclass"])
     open_sp["name"] = open_sp["Name_1"]
     open_sp["group"] = np.where(open_sp["fclass"].isin(["park", "square"]), "green", "sites")
-    to_geojson(open_sp, d / "open_spaces.json", ["name", "kind", "group"], 0.3)
+    # ключ для фото: площадки по OBJECTID_1, скверы по названию (как в scripts/geodata/photos.py)
+    # у части контуров нет OBJECTID_1: ключа и фото у них нет
+    open_sp["fid"] = [f"m-{slug(n)}" if g == "green" and isinstance(n, str) and n not in ("Сквер",)
+                      else (f"m{int(o)}" if pd.notna(o) else None)
+                      for n, g, o in zip(open_sp["Name_1"], open_sp["group"], open_sp["OBJECTID_1"])]
+    write_open_spaces(open_sp, d, photos.get("muravlenko", {}))
     buildings = read(src, "Муравленко/Вектор_итог/M_Buildings.shp")
     buildings["address"] = buildings["Street"].fillna("") + " " + buildings["House"].fillna("").astype(str)
     to_geojson(buildings.rename(columns={"floor": "floors", "apartment": "apartments", "Condition": "condition", "Type": "type"}),
@@ -269,13 +295,16 @@ def build(src: Path, out: Path, housing_root: Path | None = None) -> None:
     green = read(src, "Когалым/Открытые пространства/K_GreenSpace.shp")
     green["kind"] = green["fclass"].map(OPEN_KINDS).fillna("парк")
     green["group"] = "green"
+    green["fid"] = None
     sites = read(src, "Когалым/Открытые пространства/K_OpenSpace.shp")
     sites["kind"] = sites["fclass"].map(OPEN_KINDS).fillna(sites["fclass"])
-    sites["group"] = "sites"
-    open_sp = gpd.GeoDataFrame(
-        gpd.pd.concat([green[["name", "kind", "group", "geometry"]], sites[["name", "kind", "group", "geometry"]]], ignore_index=True),
-        crs=UTM)
-    to_geojson(open_sp, d / "open_spaces.json", ["name", "kind", "group"], 0.3)
+    sites["group"] = np.where(sites["fclass"].isin(["park", "square"]), "green", "sites")
+    # номер объекта («playground9») берётся из точечного слоя: по нему же подписаны папки с фото
+    pts = gpd.read_file(src / "Когалым/Открытые пространства/K_OpenSpace_p.shp")
+    sites["fid"] = sites.index.map(dict(zip(pts["ORIG_FID"].astype(int), pts["fclass"])))
+    cols = ["name", "kind", "group", "fid", "geometry"]
+    open_sp = gpd.GeoDataFrame(gpd.pd.concat([green[cols], sites[cols]], ignore_index=True), crs=UTM)
+    write_open_spaces(open_sp, d, photos.get("kogalym", {}))
     buildings = read(src, "Когалым/Здания/K_Buildings.shp")
     buildings["address"] = buildings["Street"].fillna("") + " " + buildings["House"].fillna("").astype(str)
     buildings["people"] = buildings["People"].round(0)
@@ -338,10 +367,43 @@ def build(src: Path, out: Path, housing_root: Path | None = None) -> None:
             tabs.append(housing_tab(housing_root, city["slug"], out / city["slug"],
                                     lambda g, p: to_geojson(g, p, housing_props, 0)))
         city["tabs"] = tabs
+        if (out / city["slug"] / "photos.json").exists():
+            city["photos"] = "photos.json"
+        if imagery.get(city["slug"]):
+            city["imagery"] = imagery_entries(imagery[city["slug"]])
 
     (out / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8")
     n = sum(len(g["layers"]) for c in manifest["cities"] for t in c["tabs"] for g in t["groups"])
     print(f"manifest.json: {n} слоёв")
+
+
+# Снимки проекта (imagery.json из imagery.py): группа в списке выбора и правообладатель по префиксу id
+IMAGERY_KINDS = [
+    ("uav", "Беспилотник, июль 2025", "Съёмка с беспилотника, проект РНФ № 25-27-00022"),
+    ("wv2", "Сверхвысокое разрешение", "© Maxar Technologies"),
+    ("ge1", "Сверхвысокое разрешение", "© Maxar Technologies"),
+    ("re", "RapidEye: ряд 2011-2018 годов", "© Planet Labs"),
+]
+
+
+def imagery_entries(entries: list[dict]) -> list[dict]:
+    """Порядок: беспилотник, сверхвысокое разрешение (новые сцены первыми), RapidEye по годам.
+    Продукты вне IMAGERY_KINDS (например, Sentinel-2 из старых запусков imagery.py) в манифест не идут."""
+    kinds = {prefix: (group, credit) for prefix, group, credit in IMAGERY_KINDS}
+    entries = [e for e in entries if e["id"].split("-")[0] in kinds]
+
+    def key(e: dict) -> tuple:
+        prefix = e["id"].split("-")[0]
+        m = re.search(r"(\d{4})$", e["id"])
+        year = int(m.group(1)) if m else 0
+        if prefix == "uav":
+            return (0, 0 if e["id"] == "uav-2025" else 1, e["id"])  # ортофото, затем NDVI и модель местности
+        if prefix in ("wv2", "ge1"):
+            return (1, -year, e["id"])  # сверхвысокое разрешение: новые сцены первыми
+        return (2, year, e["id"])  # RapidEye по годам
+
+    out = [{**e, "group": kinds[e["id"].split("-")[0]][0], "credit": kinds[e["id"].split("-")[0]][1]} for e in entries]
+    return sorted(out, key=key)
 
 
 def bounds_of(gdf: gpd.GeoDataFrame) -> list[list[float]]:
@@ -366,5 +428,7 @@ def layer(lid: str, title: str, kind: str, color, *, default: bool = False, lege
 
 
 if __name__ == "__main__":
-    # третий необязательный аргумент: корень проекта housing-yanao с выгрузками жилого фонда
-    build(Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]) if len(sys.argv) > 3 else None)
+    # необязательные аргументы («-» вместо пропущенного): 3-й корень housing-yanao,
+    # 4-й photos-index.json из photos.py, 5-й imagery.json из imagery.py
+    arg = lambda i: Path(sys.argv[i]) if len(sys.argv) > i and sys.argv[i] != "-" else None  # noqa: E731
+    build(Path(sys.argv[1]), Path(sys.argv[2]), arg(3), arg(4), arg(5))

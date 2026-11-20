@@ -52,9 +52,55 @@
 .gp-legend button.on { font-weight: 700; }
 .gp-filter { font-size: 0.8rem; margin: 0.6rem 0 0; padding: 0.5rem 0.6rem; background: var(--sand); }
 .gp-filter button { font: inherit; font-weight: 700; border: 0; background: none; text-decoration: underline; cursor: pointer; padding: 0; }
+/* Снимки проекта */
+.gp-imagery select { font: inherit; width: 100%; margin: 0.15rem 0 0.5rem; padding: 0.45rem 0.5rem; border: 2px solid var(--ink); border-radius: 6px; background: #fff; color: var(--ink); cursor: pointer; }
+.gp-comp { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.3rem; }
+.gp-comp button { font: inherit; font-size: 0.78rem; font-weight: 700; line-height: 1.2; padding: 0.4rem 0.7rem; border-radius: 999px; border: 1.5px solid var(--ink); background: #fff; color: var(--ink); cursor: pointer; text-align: left; }
+.gp-comp button[aria-checked="true"] { background: var(--ink); color: #fff; }
+.gp-ramp { display: grid; grid-template-columns: 1fr 1fr; font-size: 0.72rem; color: var(--mute); margin: 0.2rem 0 0.3rem; }
+.gp-ramp i { grid-column: 1 / -1; height: 0.6rem; border-radius: 2px; border: 1px solid rgba(0, 0, 0, 0.15); }
+.gp-ramp span:last-child { text-align: right; }
+.gp-opacity { display: flex; align-items: center; gap: 0.6rem; font-size: 0.78rem; color: var(--mute); margin-top: 0.3rem; }
+.gp-opacity input { flex: 1; accent-color: var(--tape); }
+.gp-bare { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; margin-top: 0.45rem; cursor: pointer; }
+.gp-bare input { accent-color: var(--tape); width: 1rem; height: 1rem; }
 .gp-source { font-size: 0.75rem; color: var(--mute); margin-top: 1rem; }
 .gp-source a { color: var(--ink); }
-.gp-map { flex: 1; position: relative; min-width: 0; }
+.gp-map-wrap { flex: 1; position: relative; min-width: 0; min-height: 0; }
+.gp-map { position: absolute; inset: 0; }
+
+/* Лента фото выбранной площадки или парка */
+.gp-strip { position: absolute; left: 0.6rem; right: 0.6rem; bottom: 2rem; z-index: 4; background: var(--snow); border-radius: 8px; box-shadow: 0 10px 30px rgba(20, 36, 43, 0.25); padding: 0.55rem 0.6rem 0.65rem; }
+@media (prefers-reduced-motion: no-preference) {
+  .gp-strip { animation: strip-in 0.3s ease both; }
+  @keyframes strip-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+}
+.gp-strip header { display: flex; align-items: baseline; gap: 0.6rem; padding: 0 0.2rem 0.45rem; font-size: 0.82rem; }
+.gp-strip header b { font-size: 0.95rem; }
+.gp-strip header span { color: var(--mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.gp-strip-close { font: inherit; font-size: 1.3rem; line-height: 1; border: 0; background: none; cursor: pointer; color: var(--mute); padding: 0 0.2rem; }
+.gp-strip-close:hover { color: var(--tape); }
+.gp-strip-row { display: flex; align-items: center; gap: 0.35rem; }
+.gp-strip-nav { font: inherit; flex: none; width: 2rem; height: 2rem; border-radius: 50%; border: 1.5px solid var(--ink); background: #fff; cursor: pointer; font-size: 1.2rem; line-height: 1; }
+.gp-strip-nav:hover { background: var(--ink); color: #fff; }
+.gp-thumbs { display: flex; gap: 0.4rem; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: thin; flex: 1; min-width: 0; }
+.gp-thumbs button { flex: none; border: 0; padding: 0; background: var(--fog); cursor: zoom-in; border-radius: 4px; overflow: hidden; scroll-snap-align: start; }
+.gp-thumbs img { display: block; height: 5.6rem; width: auto; max-width: 9rem; object-fit: cover; transition: transform 0.25s; }
+.gp-thumbs button:hover img { transform: scale(1.06); }
+.gp-pop-ph { margin-top: 0.3rem; color: var(--tape); font-weight: 700; }
+
+/* Просмотр фото на весь экран */
+.gp-lightbox { position: fixed; inset: 0; z-index: 60; background: rgba(10, 18, 22, 0.94); display: flex; align-items: center; justify-content: center; padding: 3rem 4rem; }
+.gp-lightbox figure { margin: 0; max-width: 100%; max-height: 100%; display: flex; flex-direction: column; align-items: center; }
+.gp-lightbox img { max-width: 100%; max-height: calc(100vh - 8rem); width: auto; height: auto; object-fit: contain; border-radius: 4px; }
+.gp-lightbox figcaption { color: #fff; margin-top: 0.7rem; font-size: 0.9rem; }
+.gp-lightbox figcaption span { color: #B8C4C7; margin-left: 0.4rem; }
+.lb-nav, .lb-close { font: inherit; position: absolute; border: 0; background: rgba(255, 255, 255, 0.12); color: #fff; cursor: pointer; border-radius: 50%; line-height: 1; }
+.lb-nav { top: 50%; width: 3rem; height: 3rem; margin-top: -1.5rem; font-size: 2rem; }
+.lb-nav.prev { left: 0.8rem; }
+.lb-nav.next { right: 0.8rem; }
+.lb-close { top: 0.8rem; right: 0.8rem; width: 2.6rem; height: 2.6rem; font-size: 1.8rem; }
+.lb-nav:hover, .lb-close:hover { background: var(--tape); }
 .gp-error { position: absolute; top: 1rem; left: 1rem; right: 1rem; background: #fff; padding: 1rem; border-left: 4px solid var(--tape); z-index: 2; }
 .gp-pop { font-family: var(--sans); font-size: 0.82rem; line-height: 1.4; }
 .gp-pop b { display: block; font-size: 0.95rem; margin-bottom: 0.25rem; }
@@ -71,4 +117,8 @@
   .gp-body { flex-direction: column-reverse; }
   .gp-panel { width: auto; max-height: 48vh; border-right: 0; border-top: 2px solid var(--ink); }
   .gp-resize { display: none; }
+  .gp-strip { bottom: 0.6rem; }
+  .gp-thumbs img { height: 4.6rem; }
+  .gp-lightbox { padding: 3rem 0.4rem; }
+  .lb-nav { top: auto; bottom: 1rem; margin-top: 0; }
 }
