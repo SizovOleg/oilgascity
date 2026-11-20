@@ -21,5 +21,14 @@ export default defineConfig({
   build: {
     // карта геопортала уходит в отдельный чанк и грузится только на /geoportal
     chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        // воркер maplibre-gl лежит в пакете как .mjs, а в mime.types nginx этого расширения нет:
+        // отданный как octet-stream модуль браузер не запустит, поэтому сохраняем его как .js
+        assetFileNames: (asset) => ((asset.names?.[0] || asset.name || '').endsWith('.mjs')
+          ? 'assets/[name]-[hash].js'
+          : 'assets/[name]-[hash][extname]'),
+      },
+    },
   },
 });
