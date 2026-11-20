@@ -176,7 +176,8 @@ export default function Geoportal() {
   useEffect(() => { document.title = 'Геопортал. OilGasCity'; }, []);
 
   useEffect(() => {
-    fetch(`${DATA}/manifest.json`)
+    // манифест сверяется с сервером при каждом открытии: после обновления слоёв браузер не держит старый
+    fetch(`${DATA}/manifest.json`, { cache: 'no-cache' })
       .then((r) => { if (!r.ok) throw new Error(`manifest ${r.status}`); return r.json(); })
       .then((m) => {
         const v = {};

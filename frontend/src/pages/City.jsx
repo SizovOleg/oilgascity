@@ -95,7 +95,7 @@ export default function City() {
 
   return (
     <main>
-      <section className="cover city-cover">
+      <section className={`cover city-cover city-${city.meta.slug}`}>
         {city.header_image ? <img src={city.header_image.large} alt={city.header_caption || ''} /> : null}
         <div className="wrap cover-wrap">
           <div className="cover-plate">

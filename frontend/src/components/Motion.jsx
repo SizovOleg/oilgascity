@@ -9,9 +9,12 @@ export function CountUp({ text, duration = 1100 }) {
     const p = parseFigure(text);
     if (!p || !motionOk() || !ref.current) return undefined;
     let raf = 0;
+    let safety = 0;
     const io = new IntersectionObserver(([e]) => {
       if (!e.isIntersecting) return;
       io.disconnect();
+      // во фоновой вкладке кадры анимации не идут: итоговое значение показывается по таймеру в любом случае
+      safety = window.setTimeout(() => setShown(text), duration + 200);
       const t0 = performance.now();
       const tick = (t) => {
         const k = Math.min(1, (t - t0) / duration);
@@ -22,7 +25,7 @@ export function CountUp({ text, duration = 1100 }) {
       raf = requestAnimationFrame(tick);
     }, { threshold: 0.4 });
     io.observe(ref.current);
-    return () => { io.disconnect(); cancelAnimationFrame(raf); };
+    return () => { io.disconnect(); cancelAnimationFrame(raf); clearTimeout(safety); };
   }, [text, duration]);
   return <span ref={ref}>{shown}</span>;
 }
