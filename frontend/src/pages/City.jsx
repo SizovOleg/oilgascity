@@ -151,6 +151,7 @@ export default function City() {
       </div>
 
       <GeoBand title={`${city.title} на геопортале`} to={`/geoportal?city=${city.meta.slug}`}
+        image={`/img/geoportal-${city.meta.slug}.jpg`}
         text="Карты из статей проекта в интерактивном виде: типы поверхности, NDVI, зелёные пространства, пешеходная доступность." />
     </main>
   );

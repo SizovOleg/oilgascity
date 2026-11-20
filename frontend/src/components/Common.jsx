@@ -116,15 +116,20 @@ export function Stats({ items, className = 'figures' }) {
   );
 }
 
-export function GeoBand({ title = 'Геопортал', text, to = '/geoportal' }) {
+export function GeoBand({ title = 'Геопортал', text, to = '/geoportal', image = '/img/geoportal-muravlenko.jpg' }) {
   return (
     <section className="portal" id="geoportal">
       <div className="wrap">
-        <h2>{title}</h2>
         <div>
-          <p>{text || 'Карты из статей проекта на одной интерактивной карте: зелёная инфраструктура, типы поверхности, NDVI, пешеходная доступность. Открывается в полном окне.'}</p>
+          <h2>{title}</h2>
+          <p>{text || 'Карты из статей проекта и возраст жилых домов на одной интерактивной карте: зелёная инфраструктура, типы поверхности, NDVI, пешеходная доступность. Открывается в полном окне.'}</p>
           <Link className="geo-btn" to={to}><PinIcon />Открыть геопортал</Link>
         </div>
+        {image ? (
+          <Link className="portal-shot" to={to} aria-label="Открыть геопортал">
+            <img src={image} alt="Фрагмент геопортала: панель слоёв и карта города" loading="lazy" width="984" height="656" />
+          </Link>
+        ) : null}
       </div>
     </section>
   );

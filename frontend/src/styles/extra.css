@@ -134,6 +134,13 @@
   @keyframes chip-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 }
 
+/* Блок «Геопортал»: фрагмент карты справа от заголовка */
+.portal .wrap { align-items: center; }
+.portal h2 { margin-bottom: 1rem; }
+.portal-shot { display: block; border-radius: 8px; overflow: hidden; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.18); transform: rotate(-1.2deg); transition: transform 0.4s ease, box-shadow 0.4s ease; }
+.portal-shot img { display: block; width: 100%; height: auto; }
+.portal-shot:hover { transform: rotate(0) scale(1.02); box-shadow: 0 24px 50px rgba(0, 0, 0, 0.45); }
+
 /* Отклик на наведение */
 .door img, .shelf img, .log-lead img { transition: transform 0.6s ease; }
 .door:hover img, .shelf:hover img, .log-lead a:hover img { transform: scale(1.04); }
