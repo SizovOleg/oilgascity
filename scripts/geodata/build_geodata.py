@@ -382,13 +382,12 @@ IMAGERY_KINDS = [
     ("uav", "Беспилотник, июль 2025", "Съёмка с беспилотника, проект РНФ № 25-27-00022"),
     ("wv2", "Сверхвысокое разрешение", "© Maxar Technologies"),
     ("ge1", "Сверхвысокое разрешение", "© Maxar Technologies"),
-    ("re", "RapidEye: ряд 2011-2018 годов", "© Planet Labs"),
 ]
 
 
 def imagery_entries(entries: list[dict]) -> list[dict]:
-    """Порядок: беспилотник, сверхвысокое разрешение (новые сцены первыми), RapidEye по годам.
-    Продукты вне IMAGERY_KINDS (например, Sentinel-2 из старых запусков imagery.py) в манифест не идут."""
+    """Порядок: беспилотник, сверхвысокое разрешение (новые сцены первыми).
+    Продукты вне IMAGERY_KINDS (Sentinel-2, RapidEye из старых запусков imagery.py) в манифест не идут."""
     kinds = {prefix: (group, credit) for prefix, group, credit in IMAGERY_KINDS}
     entries = [e for e in entries if e["id"].split("-")[0] in kinds]
 
@@ -400,7 +399,7 @@ def imagery_entries(entries: list[dict]) -> list[dict]:
             return (0, 0 if e["id"] == "uav-2025" else 1, e["id"])  # ортофото, затем NDVI и модель местности
         if prefix in ("wv2", "ge1"):
             return (1, -year, e["id"])  # сверхвысокое разрешение: новые сцены первыми
-        return (2, year, e["id"])  # RapidEye по годам
+        return (2, year, e["id"])
 
     out = [{**e, "group": kinds[e["id"].split("-")[0]][0], "credit": kinds[e["id"].split("-")[0]][1]} for e in entries]
     return sorted(out, key=key)

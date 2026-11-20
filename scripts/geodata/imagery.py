@@ -6,8 +6,8 @@
 Сцены без обзоров сначала переводятся в облачный GeoTIFF (rio-cogeo) в рабочую папку,
 исходные файлы не меняются. Контраст: 2-98 процентили каждого канала по уменьшенной копии.
 
-Владелец 20.11.2026 разрешил выкладывать коммерческие сцены (WorldView-2, GeoEye-1, RapidEye)
-и сам отвечает за условия их лицензий.
+Владелец 20.11.2026 разрешил выкладывать коммерческие сцены (WorldView-2, GeoEye-1)
+и сам отвечает за условия их лицензий. Sentinel-2 и RapidEye он счёл малоинформативными: не выкладываются.
 
 Запуск (пути к исходникам в переменных окружения, см. ниже):
   python scripts/geodata/imagery.py <вывод> [город/продукт ...] [--force]
@@ -59,9 +59,6 @@ PRODUCTS = {
          "cog": True, "nodata": 0, "composites": RGB4, "zoom": (12, 17)},
         {"id": "ge1-2017", "title": "GeoEye-1, 11.07.2017", "res": "1,6 м", "files": sorted(DG_M.glob("GE01_20170711*M1BS*.tif")),
          "cog": True, "nodata": 65535, "composites": RGB4, "zoom": (12, 16)},
-        *[{"id": f"re-{p.name[7:11]}", "title": f"RapidEye, {p.name[15:17]}.{p.name[12:14]}.{p.name[7:11]}", "res": "5 м",
-           "files": [p], "cog": False, "nodata": 0, "composites": RGB5, "zoom": (11, 14)}
-          for p in sorted((MUR / "RE").glob("Mosaic_*.tif"))],
         {"id": "uav-2025", "title": "Беспилотник, июль 2025: ортофото", "res": "около 0,3 м", "files": sorted(UAV.glob("*рто*мульти.tif")),
          "cog": True, "nodata": 65535, "composites": RGB5, "zoom": (13, 18)},  # «нет данных» у ортофото: 65535
         {"id": "uav-ndvi", "title": "Беспилотник, июль 2025: NDVI", "res": "около 0,3 м", "files": sorted(UAV.glob("*NDVI*.tif")),
