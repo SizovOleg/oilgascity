@@ -254,6 +254,18 @@ def muravlenko_point_groups() -> tuple[dict[str, dict], dict]:
 
 # ------------------------------------------------------------------ детектор людей
 
+class LazyDetector:
+    """Детектор создаётся при первом новом кадре: пересборка без новых фото не грузит модель (около 1 ГБ памяти)."""
+
+    def __init__(self) -> None:
+        self._det: PersonDetector | None = None
+
+    def tallest_person(self, im: Image.Image) -> float:
+        if self._det is None:
+            self._det = PersonDetector()
+        return self._det.tallest_person(im)
+
+
 class PersonDetector:
     def __init__(self) -> None:
         weights = torchvision.models.detection.FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT
@@ -277,7 +289,20 @@ class PersonDetector:
 
 # ------------------------------------------------------------------ обработка
 
-def process(city: str, groups: dict[str, dict], det: PersonDetector, out: Path, excluded: list) -> dict:
+def prior_excluded(out: Path) -> dict[tuple[str, str, str], str]:
+    """Решения фильтра людей прошлых запусков: (город, объект, имя файла) -> доля кадра.
+    Пересчёт из уменьшенной копии на границе порога может ответить иначе, поэтому отсеянный однажды
+    кадр отсеивается и дальше без детектора. Пути в файле бывают виндовыми, имя берётся после последнего слеша."""
+    path = out / "excluded.csv"
+    if not path.exists():
+        return {}
+    with open(path, newline="", encoding="utf-8-sig") as fh:
+        rows = list(csv.reader(fh))[1:]
+    return {(r[0], r[1], re.split(r"[\\/]", r[2])[-1]): r[3] for r in rows if len(r) >= 4}
+
+
+def process(city: str, groups: dict[str, dict], det: LazyDetector, out: Path, excluded: list,
+            prior: dict[tuple[str, str, str], str]) -> dict:
     index = {}
     for fid, g in groups.items():
         items = []
@@ -292,6 +317,9 @@ def process(city: str, groups: dict[str, dict], det: PersonDetector, out: Path, 
                     w, h = done.size
                 items.append({"t": f"{URL_BASE}/{city}/{fid}/{name}_t.webp", "f": f"{URL_BASE}/{city}/{fid}/{name}.webp",
                               "w": w, "h": h})
+                continue
+            if (city, fid, f.name) in prior:
+                excluded.append([city, fid, str(f), prior[(city, fid, f.name)]])
                 continue
             try:
                 im = ImageOps.exif_transpose(Image.open(f)).convert("RGB")
@@ -327,10 +355,12 @@ def main(out: Path) -> None:
     mur_pts, mur_layer = muravlenko_point_groups()
     print(f"Муравленко: {len(mur)} объектов и {len(mur_pts)} точек описаний с папками, в слое точек {len(mur_layer['features'])}")
     mur.update(mur_pts)
-    det = PersonDetector()
+    det = LazyDetector()
     excluded: list = []
-    result = {"kogalym": process("kogalym", kog, det, out, excluded),
-              "muravlenko": process("muravlenko", mur, det, out, excluded),
+    prior = prior_excluded(out)
+    print(f"Прежних решений фильтра людей: {len(prior)}")
+    result = {"kogalym": process("kogalym", kog, det, out, excluded, prior),
+              "muravlenko": process("muravlenko", mur, det, out, excluded, prior),
               # слой точек описаний Муравленко (в слоях города его нет): build_geodata.py кладёт его в геопортал
               "_points": {"muravlenko": mur_layer}}
     (out / "photos-index.json").write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")

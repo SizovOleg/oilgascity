@@ -223,7 +223,8 @@ def build_product(city: str, p: dict, out: Path, pool: ProcessPoolExecutor, forc
 def main(out: Path, only: list[str], force: bool = False) -> None:
     index_path = out / "imagery.json"
     index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else {}
-    with ProcessPoolExecutor(max_workers=20) as pool:
+    # OGC_WORKERS: число процессов нарезки (на общем сервере меньше ядер, чем локально)
+    with ProcessPoolExecutor(max_workers=int(os.environ.get("OGC_WORKERS", min(20, os.cpu_count() or 4)))) as pool:
         for city, products in PRODUCTS.items():
             for p in products:
                 if only and p["id"] not in only and f"{city}/{p['id']}" not in only:

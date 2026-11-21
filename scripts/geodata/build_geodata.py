@@ -26,12 +26,21 @@ from rasterio.warp import Resampling, calculate_default_transform, reproject, tr
 from shapely.geometry import mapping
 
 sys.path.insert(0, str(Path(__file__).parent))
+from downloads import export_layer  # noqa: E402
 from housing import housing_tab  # noqa: E402
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
 UTM = "EPSG:32643"
 ART_MUR = "Миляев И.А., Сизов О.С., Федоров Р.Ю., Скрицкая М.К. Региональные геосистемы, 2025, № 3"
+PUB_MUR = ("Миляев И.А., Сизов О.С., Федоров Р.Ю., Скрицкая М.К. Оценка обеспеченности зеленой инфраструктурой "
+           "жителей северного нефтегазового города (г. Муравленко, ЯНАО) // Региональные геосистемы. 2025. № 3")
+GRANT = "Данные проекта РНФ № 25-27-00022"
+# Поля открытых пространств в файлах для скачивания
+OPEN_FIELDS = [("kind", "тип: парк, сквер, детская или спортивная площадка и др."),
+               ("grp", "группа: зелёная зона (парки и скверы) или площадка"), ("name", "название")]
+GROUP_RU = {"green": "зелёная зона", "sites": "площадка"}
+SITE_REF = "URL: https://oilgascity.ru/geoportal"
 
 # Единая палитра типов поверхности для двух городов (подписи по легенде рис. 4 статьи)
 SURFACE = {
@@ -271,6 +280,19 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
                d / "vegetation.json", ["formation", "community", "area_ha"], 1.0)
     green = open_sp[open_sp["group"] == "green"]
     to_geojson(buffer_union(green, 400), d / "access_green.json", ["label"], 1.0)
+    dl_mur = {
+        "vegetation": export_layer(
+            veg, out, city="muravlenko", city_title="Муравленко", slug="vegetation", title="Растительные сообщества Муравленко",
+            about="Геоботаническая карта города: полевые описания 2025 года и дешифрирование снимков (отчёт за 2025 год, результат 3).",
+            fields=[("formation", "формация растительности (6 классов легенды)"), ("community", "растительное сообщество")],
+            license_key="cc-by", cite=f"{GRANT}, геоботаническая карта Муравленко, 2025. {SITE_REF}"),
+        "open_spaces": export_layer(
+            open_sp.assign(id=open_sp["OBJECTID_1"].astype("Int64"), grp=open_sp["group"].map(GROUP_RU)), out,
+            city="muravlenko", city_title="Муравленко", slug="open_spaces", title="Парки, скверы и площадки Муравленко",
+            about="Открытые пространства города по рис. 6 статьи и результату 7 отчёта за 2025 год, обследованы в июле 2025 года.",
+            fields=[("id", "номер объекта в слое проекта"), *OPEN_FIELDS],
+            license_key="cc-by", cite=f"{PUB_MUR}. {GRANT}. {SITE_REF}"),
+    }
 
     mur_classes = sorted(surface["Class"].dropna().unique(), key=list(SURFACE).index)
     manifest["cities"].append({
@@ -291,13 +313,14 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
             ]},
             {"title": "Растительность", "note": "Геоботаническая карта, отчёт 2025, результат 3", "layers": [
                 layer("vegetation", "Растительные сообщества", "fill", match_expr("formation", VEGETATION),
-                      legend=legend_from(VEGETATION, VEGETATION), popup=["formation", "community", "area_ha"]),
+                      legend=legend_from(VEGETATION, VEGETATION), popup=["formation", "community", "area_ha"],
+                      download=dl_mur["vegetation"]),
             ]},
             {"title": "Открытые пространства и доступность", "note": "По рис. 6 статьи и результату 7 отчёта", "layers": [
                 layer("open_spaces", "Парки, скверы и площадки", "fill",
                       ["match", ["get", "group"], "green", "#2F7D3A", "#C2410C"],
                       legend=[{"label": "Парки и скверы", "color": "#2F7D3A"}, {"label": "Детские и спортивные площадки", "color": "#C2410C"}],
-                      popup=["name", "kind"], default=True),
+                      popup=["name", "kind"], default=True, download=dl_mur["open_spaces"]),
                 layer("access_green", "400 м пешком от парков и скверов", "fill", "#2F7D3A", opacity=0.18,
                       note="Буфер построен для геопортала по методике статьи"),
             ]},
@@ -335,6 +358,16 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
     cols = ["name", "kind", "group", "fid", "geometry"]
     open_sp = gpd.GeoDataFrame(gpd.pd.concat([green[cols], sites[cols]], ignore_index=True), crs=UTM)
     write_open_spaces(open_sp, d, photos.get("kogalym", {}))
+    # контуры с osm_id взяты из OpenStreetMap и уточнены: слой распространяется по ODbL
+    kog_dl = gpd.GeoDataFrame(gpd.pd.concat([green, sites], ignore_index=True), crs=UTM)
+    kog_dl = kog_dl.assign(grp=kog_dl["group"].map(GROUP_RU),
+                           osm_id=kog_dl["osm_id"].map(lambda v: str(int(float(v))) if pd.notna(v) and str(v).strip() else None))
+    dl_kog = {"open_spaces": export_layer(
+        kog_dl, out, city="kogalym", city_title="Когалым", slug="open_spaces", title="Парки, скверы и площадки Когалыма",
+        about="Открытые пространства города, обследованные в июле 2026 года; контуры уточнены по снимкам и полевым работам.",
+        fields=[*OPEN_FIELDS, ("osm_id", "номер объекта OpenStreetMap, если контур взят оттуда")],
+        license_key="odbl", attribution="© участники OpenStreetMap",
+        cite=f"{GRANT}, открытые пространства Когалыма, 2026; © участники OpenStreetMap. {SITE_REF}")}
     buildings = read(src, "Когалым/Здания/K_Buildings.shp")
     buildings["address"] = buildings["Street"].fillna("") + " " + buildings["House"].fillna("").astype(str)
     buildings["people"] = buildings["People"].round(0)
@@ -376,7 +409,7 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
                 layer("open_spaces", "Парки, скверы и площадки", "fill",
                       ["match", ["get", "group"], "green", "#2F7D3A", "#C2410C"],
                       legend=[{"label": "Парки и скверы", "color": "#2F7D3A"}, {"label": "Детские и спортивные площадки", "color": "#C2410C"}],
-                      popup=["name", "kind"], default=True),
+                      popup=["name", "kind"], default=True, download=dl_kog["open_spaces"]),
                 layer("access_green", "400 м пешком от парков и скверов", "fill", "#2F7D3A", opacity=0.18,
                       note="Буфер построен для геопортала по методике статьи"),
             ]},
@@ -455,7 +488,7 @@ def bounds_of(gdf: gpd.GeoDataFrame) -> list[list[float]]:
 
 def layer(lid: str, title: str, kind: str, color, *, default: bool = False, legend: list | None = None,
           popup: list | None = None, label: str | None = None, width: float = 1.5, opacity: float = 0.7,
-          note: str = "") -> dict:
+          note: str = "", download: dict | None = None) -> dict:
     out = {"id": lid, "title": title, "type": kind, "file": f"{lid}.json", "color": color, "default": default,
            "width": width, "opacity": opacity}
     if legend:
@@ -466,6 +499,8 @@ def layer(lid: str, title: str, kind: str, color, *, default: bool = False, lege
         out["label"] = label
     if note:
         out["note"] = note
+    if download:
+        out["download"] = download
     return out
 
 

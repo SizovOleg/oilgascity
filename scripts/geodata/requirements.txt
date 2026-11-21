@@ -1,0 +1,19 @@
+# Конвейер геоданных геопортала (scripts/geodata) на сервере: Python 3.13, только CPU.
+# Установка: python3 -m venv /opt/oilgascity-sources/venv
+#            /opt/oilgascity-sources/venv/bin/pip install -r scripts/geodata/requirements.txt
+# Локально (Windows, Python 3.12) те же версии, кроме pillow 10.4.0 и torch с CUDA.
+--extra-index-url https://download.pytorch.org/whl/cpu
+geopandas==1.1.3
+pyogrio==0.12.1
+shapely==2.1.2
+pyproj==3.7.2
+pandas==2.3.3
+numpy==2.3.5
+rasterio==1.5.0
+rio-tiler==9.4.3
+rio-cogeo==7.0.2
+mercantile==1.2.1
+pillow==11.3.0
+openpyxl==3.1.5
+torch==2.10.0+cpu
+torchvision==0.25.0+cpu

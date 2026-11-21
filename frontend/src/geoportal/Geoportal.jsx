@@ -1,7 +1,7 @@
 // Геопортал: полноэкранная карта MapLibre со слоями по картам статей проекта и вкладкой жилого фонда.
 // Состав вкладок, слоёв, стили, легенды и графики приходят из /geodata/manifest.json
 // (scripts/geodata/build_geodata.py), поэтому новый слой добавляется без правки этого кода.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import * as maplibregl from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
@@ -57,6 +57,59 @@ const fmt = (v) => (typeof v === 'number' ? String(v).replace('.', ',') : v);
 // Старый манифест без вкладок читается как одна вкладка
 const tabsOf = (city) => city.tabs || [{ id: 'green', title: 'Слои', groups: city.groups || [] }];
 const layersOf = (tab) => tab.groups.flatMap((g) => g.layers);
+
+const fmtSize = (bytes) => (bytes >= 1e6 ? `${fmt(Math.round(bytes / 1e5) / 10)} МБ` : `${Math.max(1, Math.round(bytes / 1e3))} КБ`);
+
+// Подсказка вместо примечания: значок у заголовка, текст открывается наведением, фокусом или нажатием
+// и ложится под строкой заголовка (.gp-head) на всю ширину панели. menu: внутри ссылки, а не пояснение.
+function Hint({ children, icon = 'i', label = 'Пояснение', tone = '', menu = false }) {
+  const [pinned, setPinned] = useState(false);
+  const ref = useRef(null);
+  const id = useId();
+  useEffect(() => {
+    if (!pinned) return undefined;
+    const away = (e) => { if (!ref.current?.contains(e.target)) setPinned(false); };
+    const esc = (e) => { if (e.key === 'Escape') setPinned(false); };
+    document.addEventListener('pointerdown', away);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('pointerdown', away);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [pinned]);
+  return (
+    <span className={`gp-hint${tone ? ` ${tone}` : ''}${pinned ? ' open' : ''}`} ref={ref}>
+      <button type="button" className="gp-hint-btn" aria-label={label} aria-expanded={pinned}
+        {...(menu ? { 'aria-controls': id } : { 'aria-describedby': id })} onClick={() => setPinned((p) => !p)}>{icon}</button>
+      <span className="gp-hint-box" id={id} role={menu ? undefined : 'tooltip'}>{children}</span>
+    </span>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 2v8M4.5 6.8 8 10.3l3.5-3.5M2.5 13.5h11" />
+    </svg>
+  );
+}
+
+// Скачивание векторного слоя проекта: GeoPackage и Shapefile в zip, лицензия и как ссылаться
+function Download({ dl, ver }) {
+  return (
+    <Hint icon={<DownloadIcon />} label="Скачать слой" tone="dl" menu>
+      <b>Скачать слой</b>
+      {dl.files.map((f) => (
+        <a key={f.url} href={`${DATA}/${f.url}${ver}`} download>{f.format}<span>zip, {fmtSize(f.size)}</span></a>
+      ))}
+      <small>
+        {dl.count ? `${dl.count} объектов, исходная геометрия, UTM 43N. ` : ''}
+        Лицензия <a href={dl.license_url} target="_blank" rel="noreferrer">{dl.license}</a>{dl.attribution ? `, ${dl.attribution}` : ''}.
+        {dl.cite ? ` Ссылка: ${dl.cite}.` : ''}
+      </small>
+    </Hint>
+  );
+}
 
 // Фоновая загрузка кадра в кэш браузера
 const preloaded = new Set();
@@ -232,34 +285,42 @@ function ImageryPicker({ city, prod, comp, zoom, opacity, bare, onPick, onComp, 
   const far = prod && zoom !== null && zoom < prod.minzoom - 0.5;
   return (
     <section className="gp-group gp-imagery">
-      <h3>Снимки проекта</h3>
-      <p className="gp-note">Исходные многоканальные сцены и съёмка с беспилотника. Снимок ложится под слои карты.</p>
-      <select value={prod?.id || ''} onChange={(e) => onPick(e.target.value)} aria-label="Снимок">
-        <option value="">Без снимка</option>
-        {groups.map(([title, list]) => (
-          <optgroup key={title} label={title}>
-            {list.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
-          </optgroup>
-        ))}
-      </select>
+      <div className="gp-head">
+        <h3>Снимки проекта</h3>
+        <Hint label="О снимках">
+          Исходные многоканальные сцены и съёмка с беспилотника. Снимок ложится под слои карты.
+          {prod ? ` Выбран: ${prod.title}, разрешение ${prod.res}.${prod.credit ? ` ${prod.credit}.` : ''}` : ''}
+        </Hint>
+      </div>
+      <div className="gp-head gp-pick">
+        <select value={prod?.id || ''} onChange={(e) => onPick(e.target.value)} aria-label="Снимок">
+          <option value="">Без снимка</option>
+          {groups.map(([title, list]) => (
+            <optgroup key={title} label={title}>
+              {list.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
+            </optgroup>
+          ))}
+        </select>
+        {prod?.note ? <Hint icon="!" tone="warn" label="Оговорка о качестве снимка">{prod.note}</Hint> : null}
+      </div>
       {prod ? (
         <>
           {prod.composites.length > 1 ? (
-            <div className="gp-comp" role="radiogroup" aria-label="Цветовой синтез">
-              {prod.composites.map((c) => (
-                <button key={c.id} type="button" role="radio" aria-checked={c.id === comp.id} onClick={() => onComp(c.id)}>{c.title}</button>
-              ))}
+            <div className="gp-head">
+              <div className="gp-comp" role="radiogroup" aria-label="Цветовой синтез">
+                {prod.composites.map((c) => (
+                  <button key={c.id} type="button" role="radio" aria-checked={c.id === comp.id} onClick={() => onComp(c.id)}>{c.title}</button>
+                ))}
+              </div>
+              {COMPOSITE_NOTES[comp.id] ? <Hint label="Что показывает синтез">{COMPOSITE_NOTES[comp.id]}</Hint> : null}
             </div>
           ) : null}
-          {COMPOSITE_NOTES[comp.id] ? <p className="gp-note">{COMPOSITE_NOTES[comp.id]}</p> : null}
           {prod.legend ? (
             <div className="gp-ramp">
               <i style={{ background: `linear-gradient(90deg, ${prod.legend.map((l) => l.color).join(', ')})` }} />
               <span>{prod.legend[0].label}</span><span>{prod.legend[prod.legend.length - 1].label}</span>
             </div>
           ) : null}
-          <p className="gp-note">Разрешение {prod.res}.{prod.credit ? ` ${prod.credit}.` : ''}</p>
-          {prod.note ? <p className="gp-caveat">{prod.note}</p> : null}
           {far ? <p className="gp-filter">Снимок виден при более крупном масштабе: приблизьте карту.</p> : null}
           <label className="gp-opacity">
             Непрозрачность
@@ -280,7 +341,10 @@ function DecadeChart({ chart, filter, onFilter }) {
   const max = Math.max(...chart.bars.map((b) => b.value), 1);
   return (
     <figure className="gp-chart">
-      <figcaption><b>{chart.title}</b><span>{chart.unit}</span></figcaption>
+      <figcaption className="gp-head">
+        <span><b>{chart.title}</b><span>{chart.unit}</span></span>
+        <Hint label="О графике">{chart.note} Щелчок по столбцу показывает дома этого десятилетия.</Hint>
+      </figcaption>
       <div className="gp-bars" role="group" aria-label={chart.title}>
         {chart.bars.map((b) => (
           <button key={b.label} type="button" aria-pressed={filter === b.label}
@@ -288,12 +352,11 @@ function DecadeChart({ chart, filter, onFilter }) {
             onClick={() => onFilter(filter === b.label ? null : b.label)}
             title={`${b.label}: ${fmt(b.value)} тыс. м², ${b.count} домов`}>
             <span className="v">{fmt(b.value)}</span>
-            <span className="bar" style={{ height: `${Math.max(3, (b.value / max) * 100)}%`, background: b.color }} />
+            <span className="gp-col" style={{ height: `${Math.max(3, (b.value / max) * 100)}%`, background: b.color }} />
             <span className="l">{b.label}</span>
           </button>
         ))}
       </div>
-      <p className="gp-note">{chart.note} Щелчок по столбцу показывает дома этого десятилетия.</p>
     </figure>
   );
 }
@@ -560,7 +623,10 @@ export default function Geoportal() {
         {panelOpen && city && tab ? (
           <aside className="gp-panel" aria-label="Слои карты" style={{ '--panel-w': `${panelW}px` }}>
             <div className="gp-city">
-              <h2>{city.title}</h2>
+              <div className="gp-head">
+                <h2>{city.title}</h2>
+                {tab.about || city.about ? <Hint label="О картах">{tab.about || city.about}</Hint> : null}
+              </div>
               <p className="gp-region">{city.region}</p>
             </div>
             {tabs.length > 1 ? (
@@ -570,7 +636,6 @@ export default function Geoportal() {
                 ))}
               </div>
             ) : null}
-            <p className="gp-about">{tab.about || city.about}</p>
             {tab.facts?.length ? (
               <ul className="gp-facts">{tab.facts.map((f, i) => <li key={i}><b>{f.value}</b>{f.label}</li>)}</ul>
             ) : null}
@@ -586,18 +651,23 @@ export default function Geoportal() {
             ) : null}
             {tab.groups.map((g) => (
               <section className="gp-group" key={g.title}>
-                <h3>{g.title}</h3>
-                {g.note ? <p className="gp-note">{g.note}</p> : null}
+                <div className="gp-head">
+                  <h3>{g.title}</h3>
+                  {g.note ? <Hint label={`О группе «${g.title}»`}>{g.note}</Hint> : null}
+                </div>
                 {g.layers.map((l) => {
                   const id = layerKey(city.slug, l.id);
                   return (
                     <div className="gp-layer" key={id}>
-                      <label>
-                        <input type="checkbox" checked={Boolean(visible[id])} onChange={() => toggle(id)} />
-                        {l.title}
-                      </label>
+                      <div className="gp-head">
+                        <label>
+                          <input type="checkbox" checked={Boolean(visible[id])} onChange={() => toggle(id)} />
+                          {l.title}
+                        </label>
+                        {l.note ? <Hint label={`О слое «${l.title}»`}>{l.note}</Hint> : null}
+                        {l.download ? <Download dl={l.download} ver={ver} /> : null}
+                      </div>
                       {visible[id] ? <Legend layer={l} filter={filter} onFilter={setFilter} /> : null}
-                      {visible[id] && l.note ? <p className="gp-note">{l.note}</p> : null}
                     </div>
                   );
                 })}
