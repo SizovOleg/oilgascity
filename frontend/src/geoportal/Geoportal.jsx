@@ -1,7 +1,7 @@
 // Геопортал: полноэкранная карта MapLibre со слоями по картам статей проекта и вкладкой жилого фонда.
 // Состав вкладок, слоёв, стили, легенды и графики приходят из /geodata/manifest.json
 // (scripts/geodata/build_geodata.py), поэтому новый слой добавляется без правки этого кода.
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import * as maplibregl from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
@@ -40,7 +40,7 @@ const FIELD_LABELS = {
   kind: 'Тип', area_ha: 'Площадь, га', address: 'Адрес', floors: 'Этажей', apartments: 'Квартир',
   year: 'Год постройки', condition: 'Состояние', type: 'Тип дома', people: 'Жителей (оценка)',
   formation: 'Формация', community: 'Сообщество', zone: 'Зона', area: 'Жилая площадь, м²',
-  house_type: 'Тип', source: 'Контур', note: 'Описание',
+  house_type: 'Тип', source: 'Контур', note: 'Описание', name: 'Название', photos: 'Фото', decade: 'Десятилетие',
 };
 
 // Что показывает синтез: подсказка под кнопками выбора
@@ -361,6 +361,193 @@ function DecadeChart({ chart, filter, onFilter }) {
   );
 }
 
+function TableIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <rect x="2" y="2.5" width="12" height="11" rx="1" /><path d="M2 6.2h12M2 9.8h12M6.5 6.2v7.3" />
+    </svg>
+  );
+}
+
+// Охват геометрии [минX, минY, максX, максY] для перелёта к объекту и отбора «в окне карты»
+function bboxOf(geom) {
+  const b = [Infinity, Infinity, -Infinity, -Infinity];
+  const walk = (c) => {
+    if (typeof c[0] === 'number') {
+      if (c[0] < b[0]) b[0] = c[0];
+      if (c[1] < b[1]) b[1] = c[1];
+      if (c[0] > b[2]) b[2] = c[0];
+      if (c[1] > b[3]) b[3] = c[1];
+    } else c.forEach(walk);
+  };
+  if (geom) walk(geom.coordinates);
+  return b;
+}
+
+// Подсветка объекта из таблицы: отдельный источник поверх слоёв; после смены подложки создаётся заново
+const HL = 'gp-hl';
+let hlWant = null; // последний запрошенный объект: применяется, когда стиль освободится
+let hlWaiting = false;
+function highlight(map, feature) {
+  if (!map) return;
+  hlWant = feature;
+  const data = () => ({ type: 'FeatureCollection', features: hlWant ? [hlWant] : [] });
+  if (map.getSource(HL)) { map.getSource(HL).setData(data()); return; }
+  // isStyleLoaded ложно и пока грузятся тайлы; добавление источника тогда откладывается до «idle»
+  if (!map.isStyleLoaded()) {
+    if (!hlWaiting) {
+      hlWaiting = true;
+      map.once('idle', () => { hlWaiting = false; highlight(map, hlWant); });
+    }
+    return;
+  }
+  map.addSource(HL, { type: 'geojson', data: data() });
+  const is = (...types) => ['in', ['geometry-type'], ['literal', types]];
+  map.addLayer({ id: `${HL}-fill`, type: 'fill', source: HL, filter: is('Polygon', 'MultiPolygon'), paint: { 'fill-color': '#C2410C', 'fill-opacity': 0.25 } });
+  map.addLayer({ id: `${HL}-line`, type: 'line', source: HL, filter: is('Polygon', 'MultiPolygon', 'LineString', 'MultiLineString'), paint: { 'line-color': '#C2410C', 'line-width': 3 } });
+  map.addLayer({ id: `${HL}-pt`, type: 'circle', source: HL, filter: is('Point', 'MultiPoint'), paint: { 'circle-radius': 10, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#C2410C', 'circle-stroke-width': 3 } });
+}
+
+const cellText = (f, v) => {
+  if (v === null || v === undefined || v === '' || v === 'None' || v === 'null') return '';
+  if (f === 'photos') return Number(v) > 0 ? String(v) : '';
+  return String(fmt(v));
+};
+
+// Атрибутивная таблица слоя в «островке» над картой: свёрнута в пилюлю или раскрыта; поиск, сортировка,
+// «только в окне карты»; наведение на строку подсвечивает объект, щелчок приближает к нему
+function AttrIsland({ city, layer, ver, filter, mapRef, onPick, onClose }) {
+  const [rows, setRows] = useState(null);
+  const [open, setOpen] = useState(true);
+  const [q, setQ] = useState('');
+  const [sort, setSort] = useState({ key: null, dir: 1 });
+  const [inView, setInView] = useState(false);
+  const [view, setView] = useState(null);
+  const [sel, setSel] = useState(null);
+  const cols = layer.table;
+
+  // островок пересоздаётся (key) при смене слоя, поэтому начальное состояние сбрасывать здесь не нужно
+  useEffect(() => {
+    let alive = true;
+    fetch(`${DATA}/${city}/${layer.file}${ver}`)
+      .then((r) => { if (!r.ok) throw new Error(`${layer.file} ${r.status}`); return r.json(); })
+      .then((fc) => { if (alive) setRows(fc.features.map((f, i) => ({ i, f, bb: bboxOf(f.geometry) }))); })
+      .catch((e) => { console.error(e); if (alive) setRows([]); });
+    return () => { alive = false; };
+  }, [city, layer, ver]);
+
+  // «только в окне карты»: строки отбираются по охвату карты после каждого сдвига
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!inView || !map) return undefined;
+    const upd = () => { const b = map.getBounds(); setView([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]); };
+    upd();
+    map.on('moveend', upd);
+    return () => map.off('moveend', upd);
+  }, [inView, mapRef]);
+
+  // подсветка снимается при закрытии островка
+  useEffect(() => () => highlight(mapRef.current, null), [mapRef]);
+
+  const shown = useMemo(() => {
+    if (!rows) return [];
+    const needle = q.trim().toLowerCase();
+    let out = rows.filter((r) => {
+      const p = r.f.properties;
+      if (layer.filter && filter && p[layer.filter] !== filter) return false;
+      if (inView && view && (r.bb[2] < view[0] || r.bb[0] > view[2] || r.bb[3] < view[1] || r.bb[1] > view[3])) return false;
+      return !needle || cols.some((c) => cellText(c, p[c]).toLowerCase().includes(needle));
+    });
+    if (sort.key) {
+      const k = sort.key;
+      out = [...out].sort((a, b) => {
+        const x = a.f.properties[k];
+        const y = b.f.properties[k];
+        if (x === null || x === undefined || x === '') return 1;
+        if (y === null || y === undefined || y === '') return -1;
+        return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'ru', { numeric: true })) * sort.dir;
+      });
+    }
+    return out;
+  }, [rows, q, sort, inView, view, filter, layer, cols]);
+
+  const total = rows ? rows.filter((r) => !(layer.filter && filter && r.f.properties[layer.filter] !== filter)).length : 0;
+  const LIMIT = 1000;
+  const boxRef = useRef(null);
+  const pick = (r) => {
+    const map = mapRef.current;
+    setSel(r.i);
+    highlight(map, r.f);
+    onPick(r.f.properties);
+    if (!map) return;
+    // объект встаёт в свободную часть карты: под островком и над лентой фото (она открывается у объектов с фото)
+    const h = map.getContainer().clientHeight;
+    const top = (boxRef.current?.getBoundingClientRect().bottom ?? 0) - map.getContainer().getBoundingClientRect().top + 24;
+    const bottom = Number(r.f.properties.photos) > 0 ? 190 : 50;
+    const k = top + bottom > h - 80 ? (h - 80) / (top + bottom) : 1; // на низком экране отступы ужимаются
+    const [x0, y0, x1, y1] = r.bb;
+    map.fitBounds([[x0, y0], [x1, y1]], { padding: { top: top * k, bottom: bottom * k, left: 50, right: 50 }, maxZoom: 17, duration: 700 });
+  };
+  // числовые колонки (площадь, этажи, год) выравниваются вправо вместе с заголовком
+  const numCols = useMemo(() => new Set(cols.filter((c) => rows?.some((r) => typeof r.f.properties[c] === 'number'))), [rows, cols]);
+  const restore = () => highlight(mapRef.current, rows?.find((r) => r.i === sel)?.f || null);
+  const sortBy = (c) => setSort((s) => (s.key === c ? { key: c, dir: -s.dir } : { key: c, dir: 1 }));
+  const count = rows ? (shown.length === total ? `${total}` : `${shown.length} из ${total}`) : '';
+
+  return (
+    <section className={`gp-island${open ? ' open' : ''}`} aria-label={`Таблица слоя «${layer.title}»`} ref={boxRef}>
+      <header>
+        <button type="button" className="gp-island-title" aria-expanded={open} onClick={() => setOpen((o) => !o)}
+          title={open ? 'Свернуть таблицу' : 'Развернуть таблицу'}>
+          <TableIcon /><b>{layer.title}</b><span>{count}</span><i aria-hidden="true">{open ? '▴' : '▾'}</i>
+        </button>
+        <button type="button" className="gp-island-x" aria-label="Закрыть таблицу" onClick={onClose}>×</button>
+      </header>
+      {open ? (
+        <div className="gp-island-body">
+          <div className="gp-island-tools">
+            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск по таблице" aria-label="Поиск по таблице" />
+            <label><input type="checkbox" checked={inView} onChange={(e) => setInView(e.target.checked)} />только в окне карты</label>
+            {layer.filter && filter ? <span className="gp-island-filter">{filter}</span> : null}
+          </div>
+          <div className="gp-island-scroll" onMouseLeave={restore}>
+            {!rows ? <p className="gp-island-msg">Загрузка…</p> : null}
+            {rows && !shown.length ? <p className="gp-island-msg">Нет строк{q ? ' по этому запросу' : ''}.</p> : null}
+            {shown.length ? (
+              <table>
+                <thead>
+                  <tr>
+                    {cols.map((c) => (
+                      <th key={c} className={numCols.has(c) ? 'num' : ''} aria-sort={sort.key === c ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
+                        <button type="button" onClick={() => sortBy(c)}>
+                          {FIELD_LABELS[c] || c}{sort.key === c ? (sort.dir > 0 ? ' ↑' : ' ↓') : ''}
+                        </button>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.slice(0, LIMIT).map((r) => (
+                    <tr key={r.i} className={r.i === sel ? 'sel' : ''} tabIndex={0}
+                      onMouseEnter={() => highlight(mapRef.current, r.f)} onClick={() => pick(r)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(r); } }}>
+                      {cols.map((c) => {
+                        const v = r.f.properties[c];
+                        return <td key={c} className={numCols.has(c) ? 'num' : ''}>{cellText(c, v)}</td>;
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : null}
+            {shown.length > LIMIT ? <p className="gp-island-msg">Показаны первые {LIMIT}: уточните поиск или включите «только в окне карты».</p> : null}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export default function Geoportal() {
   const [params, setParams] = useSearchParams();
   const [manifest, setManifest] = useState(null);
@@ -376,6 +563,7 @@ export default function Geoportal() {
   const [opacity, setOpacity] = useState(1);
   const [zoom, setZoom] = useState(null);
   const [bare, setBare] = useState(false); // «только снимок»: векторные слои скрыты, флажки не сбрасываются
+  const [tableId, setTableId] = useState(null); // слой, чья атрибутивная таблица открыта в островке
   const [panelOpen, setPanelOpen] = useState(() => !window.matchMedia('(max-width: 760px)').matches);
   // ширина панели слоёв: тянется за край мышью или стрелками, запоминается в браузере
   const [panelW, setPanelW] = useState(() => {
@@ -496,6 +684,16 @@ export default function Geoportal() {
       .catch((e) => console.error(e));
   }, [city, photos, ver]);
 
+  // лента фото объекта (площадка, парк, точка описания), если у него есть снимки
+  const galleryFor = useCallback((p) => {
+    const g = p.fid && photos[city?.slug]?.[p.fid];
+    if (!g) return null;
+    // своё название объекта лучше общего заголовка, кроме заглушек («Площадка») и кодов точек (КЭ_12)
+    const own = p.name;
+    const generic = !own || own === 'Площадка' || own === 'Спорт' || /^К[ЭВ]_\d+$/.test(own);
+    return { ...g, title: generic ? g.title : own };
+  }, [photos, city]);
+
   // подписи по щелчку
   useEffect(() => {
     const map = mapRef.current;
@@ -527,11 +725,7 @@ export default function Geoportal() {
         ? `<div class="gp-pop-more">${i + 1} из ${hits.length} в этом месте: щёлкните ещё раз, чтобы показать следующий</div>` : '';
       new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(e.lngLat).setHTML(popupHtml(layer, hit.properties) + more).addTo(map);
       // у площадки или парка с фото внизу открывается лента миниатюр
-      const g = hit.properties.fid && photos[city.slug]?.[hit.properties.fid];
-      // своё название объекта лучше общего заголовка, кроме заглушек («Площадка») и кодов точек (КЭ_12)
-      const own = hit.properties.name;
-      const generic = !own || own === 'Площадка' || own === 'Спорт' || /^К[ЭВ]_\d+$/.test(own);
-      setGallery(g ? { ...g, title: generic ? g.title : own } : null);
+      setGallery(galleryFor(hit.properties));
     };
     const onMove = (e) => {
       const n = map.queryRenderedFeatures(e.point, { layers: present() }).length;
@@ -540,7 +734,7 @@ export default function Geoportal() {
     map.on('click', onClick);
     map.on('mousemove', onMove);
     return () => { map.off('click', onClick); map.off('mousemove', onMove); };
-  }, [city, tab, visible, photos]);
+  }, [city, tab, visible, galleryFor]);
 
   // карта подстраивается под новую ширину панели
   useEffect(() => {
@@ -578,6 +772,7 @@ export default function Geoportal() {
   const go = (next) => {
     setFilter(null);
     setGallery(null);
+    setTableId(null);
     const p = { city: next.city ?? city.slug };
     const t = next.tab ?? tab?.id;
     if (t && t !== tabsOf(city)[0].id) p.tab = t;
@@ -589,6 +784,13 @@ export default function Geoportal() {
     mapRef.current.setStyle(BASEMAPS[key].style);
   };
   const toggle = (id) => setVisibleState((v) => ({ ...v, [id]: !v[id] }));
+  // таблица слоя: повторное нажатие закрывает; скрытый слой включается, чтобы строку было видно на карте
+  const openTable = (l) => {
+    if (tableId === l.id) { setTableId(null); return; }
+    setTableId(l.id);
+    setVisibleState((v) => ({ ...v, [layerKey(city.slug, l.id)]: true }));
+  };
+  const tableLayer = tab && tableId ? layersOf(tab).find((l) => l.id === tableId && l.table) : null;
   // выбор снимка: синтез сохраняется, если он есть у нового снимка; издалека карта приближается к снимку
   const pickScene = (id) => {
     const next = id ? city.imagery.find((p) => p.id === id) : null;
@@ -665,7 +867,17 @@ export default function Geoportal() {
                           {l.title}
                         </label>
                         {l.note ? <Hint label={`О слое «${l.title}»`}>{l.note}</Hint> : null}
-                        {l.download ? <Download dl={l.download} ver={ver} /> : null}
+                        {l.table || l.download ? (
+                          <span className="gp-tools">
+                            {l.table ? (
+                              <button type="button" className="gp-tool" aria-pressed={tableId === l.id}
+                                aria-label={`Таблица слоя «${l.title}»`} title="Атрибутивная таблица" onClick={() => openTable(l)}>
+                                <TableIcon />
+                              </button>
+                            ) : null}
+                            {l.download ? <Download dl={l.download} ver={ver} /> : null}
+                          </span>
+                        ) : null}
                       </div>
                       {visible[id] ? <Legend layer={l} filter={filter} onFilter={setFilter} /> : null}
                     </div>
@@ -686,6 +898,10 @@ export default function Geoportal() {
           <div className="gp-map" ref={boxRef}>
             {error ? <p className="gp-error">Не удалось загрузить данные геопортала. Попробуйте обновить страницу.</p> : null}
           </div>
+          {tableLayer && city ? (
+            <AttrIsland key={`${city.slug}-${tableLayer.id}`} city={city.slug} layer={tableLayer} ver={ver} filter={filter}
+              mapRef={mapRef} onPick={(p) => setGallery(galleryFor(p))} onClose={() => setTableId(null)} />
+          ) : null}
           {gallery ? <PhotoStrip gallery={gallery} onOpen={setShown} onClose={() => setGallery(null)} /> : null}
         </div>
       </div>

@@ -25,8 +25,12 @@
 .gp-hint-btn { font: 800 0.66rem/1 var(--sans); width: 1.1rem; height: 1.1rem; flex: none; padding: 0; display: inline-grid; place-items: center; border-radius: 50%; border: 1.5px solid var(--mute); background: #fff; color: var(--mute); cursor: help; transition: border-color 0.15s, color 0.15s, background 0.15s; }
 .gp-hint-btn:hover, .gp-hint-btn:focus-visible, .gp-hint.open .gp-hint-btn { border-color: var(--ink); color: var(--ink); }
 .gp-hint.warn .gp-hint-btn { border-color: var(--tape); background: var(--tape); color: #fff; }
-.gp-hint.dl { margin-left: auto; }
-.gp-hint.dl .gp-hint-btn { cursor: pointer; border-radius: 4px; width: 1.4rem; height: 1.4rem; }
+/* Кнопки у слоя: таблица и скачивание, прижаты вправо */
+.gp-tools { margin-left: auto; display: inline-flex; gap: 0.3rem; flex: none; }
+.gp-tool, .gp-hint.dl .gp-hint-btn { cursor: pointer; border-radius: 4px; width: 1.4rem; height: 1.4rem; }
+.gp-tool { flex: none; padding: 0; display: inline-grid; place-items: center; border: 1.5px solid var(--mute); background: #fff; color: var(--mute); transition: border-color 0.15s, color 0.15s, background 0.15s; }
+.gp-tool:hover, .gp-tool:focus-visible { border-color: var(--ink); color: var(--ink); }
+.gp-tool[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: #fff; }
 .gp-hint-box { display: none; position: absolute; left: 0; right: 0; top: calc(100% + 0.35rem); z-index: 6; font-size: 0.78rem; font-weight: 400; line-height: 1.4; letter-spacing: 0; color: var(--ink); background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--ink); padding: 0.45rem 0.6rem; box-shadow: 0 6px 18px rgba(20, 36, 43, 0.14); }
 .gp-hint-box::before { content: ""; position: absolute; left: 0; right: 0; top: -0.45rem; height: 0.45rem; }
 .gp-hint.warn .gp-hint-box { background: var(--sand); border-left-color: var(--tape); }
@@ -89,6 +93,38 @@
 .gp-map-wrap { flex: 1; position: relative; min-width: 0; min-height: 0; }
 .gp-map { position: absolute; inset: 0; }
 
+/* Островок с атрибутивной таблицей: сверху по центру карты, свёрнут в пилюлю или раскрыт */
+.gp-island { position: absolute; top: 0.6rem; left: 50%; transform: translateX(-50%); z-index: 5; max-width: calc(100% - 7rem); background: var(--ink); color: #fff; border-radius: 999px; box-shadow: 0 10px 30px rgba(20, 36, 43, 0.3); transition: border-radius 0.25s; }
+.gp-island.open { width: min(46rem, calc(100% - 7rem)); border-radius: 16px; display: flex; flex-direction: column; max-height: calc(100% - 1.2rem); }
+.gp-island header { display: flex; align-items: center; gap: 0.2rem; padding: 0.2rem 0.3rem 0.2rem 0.35rem; }
+.gp-island-title { font: inherit; font-size: 0.84rem; display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0; border: 0; background: none; color: inherit; cursor: pointer; padding: 0.4rem 0.5rem; text-align: left; }
+.gp-island-title b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.gp-island-title span { opacity: 0.7; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gp-island-title i { font-style: normal; opacity: 0.7; margin-left: auto; padding-left: 0.3rem; }
+.gp-island-x { font: inherit; font-size: 1.25rem; line-height: 1; width: 1.9rem; height: 1.9rem; flex: none; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.12); color: #fff; cursor: pointer; }
+.gp-island-x:hover, .gp-island-x:focus-visible { background: var(--tape); }
+.gp-island-body { background: #fff; color: var(--ink); border-radius: 11px; margin: 0 0.35rem 0.35rem; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .gp-island-body { animation: island-in 0.22s ease both; }
+  @keyframes island-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+}
+.gp-island-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--line); font-size: 0.78rem; }
+.gp-island-tools input[type="search"] { font: inherit; flex: 1; min-width: 9rem; padding: 0.35rem 0.5rem; border: 1.5px solid var(--ink); border-radius: 6px; }
+.gp-island-tools label { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; color: var(--mute); }
+.gp-island-tools label input { accent-color: var(--tape); }
+.gp-island-filter { background: var(--sand); padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 700; }
+.gp-island-scroll { max-height: min(45vh, 26rem); min-height: 0; flex: 1 1 auto; overflow: auto; overscroll-behavior: contain; }
+.gp-island table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+.gp-island th { position: sticky; top: 0; z-index: 1; background: var(--fog); text-align: left; }
+.gp-island th button { font: inherit; font-weight: 700; width: 100%; border: 0; background: none; padding: 0.45rem 0.55rem; cursor: pointer; color: var(--ink); white-space: nowrap; text-align: inherit; }
+.gp-island td { padding: 0.35rem 0.55rem; border-top: 1px solid var(--fog); vertical-align: top; max-width: 24rem; }
+.gp-island td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gp-island th.num { text-align: right; }
+.gp-island tbody tr { cursor: pointer; }
+.gp-island tbody tr:hover, .gp-island tbody tr:focus-visible { background: #FBF3EC; outline: none; }
+.gp-island tbody tr.sel { background: var(--sand); }
+.gp-island-msg { margin: 0; padding: 0.7rem; color: var(--mute); font-size: 0.8rem; }
+
 /* Лента фото выбранной площадки или парка */
 .gp-strip { position: absolute; left: 0.6rem; right: 0.6rem; bottom: 2rem; z-index: 4; background: var(--snow); border-radius: 8px; box-shadow: 0 10px 30px rgba(20, 36, 43, 0.25); padding: 0.55rem 0.6rem 0.65rem; }
 @media (prefers-reduced-motion: no-preference) {
@@ -139,6 +175,9 @@
   .gp-panel { width: auto; max-height: 48vh; border-right: 0; border-top: 2px solid var(--ink); }
   .gp-resize { display: none; }
   .gp-strip { bottom: 0.6rem; }
+  .gp-island { left: 0.6rem; transform: none; max-width: calc(100% - 4.2rem); }
+  .gp-island.open { width: calc(100% - 4.2rem); }
+  .gp-island-scroll { max-height: 38vh; }
   .gp-thumbs img { height: 4.6rem; }
   .gp-lightbox { padding: 3rem 0.4rem; }
   .lb-nav { top: auto; bottom: 1rem; margin-top: 0; }

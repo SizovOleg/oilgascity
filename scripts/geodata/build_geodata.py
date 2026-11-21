@@ -210,7 +210,8 @@ def write_open_spaces(open_sp: gpd.GeoDataFrame, d: Path, photos: dict) -> None:
     """Слой открытых пространств с числом фото у объекта и файл photos.json для карусели."""
     open_sp = open_sp.copy()
     open_sp["photos"] = open_sp["fid"].map(lambda f: len(photos.get(f, {}).get("items", [])) if f else 0)
-    to_geojson(open_sp, d / "open_spaces.json", ["name", "kind", "group", "fid", "photos"], 0.3)
+    open_sp["area_ha"] = (open_sp.geometry.area / 1e4).round(2)  # для таблицы, в UTM до упрощения
+    to_geojson(open_sp, d / "open_spaces.json", ["name", "kind", "group", "fid", "photos", "area_ha"], 0.3)
     if photos:
         (d / "photos.json").write_text(json.dumps(photos, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
         print(f"  photos.json: {len(photos)} объектов, {sum(len(g['items']) for g in photos.values())} снимков")
@@ -270,11 +271,20 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
     to_geojson(buildings.rename(columns={"floor": "floors", "apartment": "apartments", "Condition": "condition", "Type": "type"}),
                d / "buildings.json", ["address", "floors", "apartments", "year", "condition", "type"], 0.3)
     zones = read(src, "Муравленко/Вектор/Functional_zones.shp").rename(columns={"Zones": "zone"})
-    to_geojson(zones, d / "zones.json", ["zone"], 0.5)
+    zones["area_ha"] = (zones.geometry.area / 1e4).round(2)
+    to_geojson(zones, d / "zones.json", ["zone", "area_ha"], 0.5)
     points = read(src, "Муравленко/Вектор/M_Points.shp").rename(columns={"Name": "name"})
     to_geojson(points, d / "places.json", ["name"], 0)
     surface = read(src, "Муравленко/Классификация/Classification_map_v3.shp")
     to_geojson(with_names(dissolve(surface, "Class", 30, 2.0).rename(columns={"Class": "cls"})), d / "surface.json", ["cls", "name", "area_ha"], 0)
+    dl_mur_surface = export_layer(
+        surface.assign(cls=surface["Class"], cls_name=surface["Class"].map(lambda c: SURFACE[c][0] if c in SURFACE else None),
+                       space=surface["fclass"].map(OPEN_KINDS)), out,
+        city="muravlenko", city_title="Муравленко", slug="surface", title="Типы поверхности Муравленко",
+        about="Классификация снимка WorldView-2 от 17.07.2020 по рис. 4a статьи: классы растительности, открытых грунтов, воды и застройки.",
+        fields=[("cls", "код класса (латиницей, как в исходной классификации)"), ("cls_name", "класс поверхности"),
+                ("space", "тип открытого пространства, в которое попадает контур (если попадает)")],
+        license_key="cc-by", cite=f"{PUB_MUR}. {GRANT}. {SITE_REF}")
     veg = read(src, "Муравленко/Карта растительности/Vegetation_map.shp").rename(columns={"Veg_3": "formation", "Veg_2": "community"})
     to_geojson(dissolve(veg, "community").merge(veg[["community", "formation"]].drop_duplicates("community"), on="community"),
                d / "vegetation.json", ["formation", "community", "area_ha"], 1.0)
@@ -309,30 +319,34 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
             ]},
             {"title": "Типы поверхности", "note": "По рис. 4a статьи: снимок WorldView-2, 17.07.2020", "layers": [
                 layer("surface", "Классификация типов поверхности", "fill", match_expr("cls", SURFACE),
-                      legend=legend_from(mur_classes, SURFACE), popup=["name"], default=True),
+                      legend=legend_from(mur_classes, SURFACE), popup=["name"], default=True,
+                      table=["name", "area_ha"], download=dl_mur_surface),
             ]},
             {"title": "Растительность", "note": "Геоботаническая карта, отчёт 2025, результат 3", "layers": [
                 layer("vegetation", "Растительные сообщества", "fill", match_expr("formation", VEGETATION),
                       legend=legend_from(VEGETATION, VEGETATION), popup=["formation", "community", "area_ha"],
-                      download=dl_mur["vegetation"]),
+                      table=["formation", "community", "area_ha"], download=dl_mur["vegetation"]),
             ]},
             {"title": "Открытые пространства и доступность", "note": "По рис. 6 статьи и результату 7 отчёта", "layers": [
                 layer("open_spaces", "Парки, скверы и площадки", "fill",
                       ["match", ["get", "group"], "green", "#2F7D3A", "#C2410C"],
                       legend=[{"label": "Парки и скверы", "color": "#2F7D3A"}, {"label": "Детские и спортивные площадки", "color": "#C2410C"}],
-                      popup=["name", "kind"], default=True, download=dl_mur["open_spaces"]),
+                      popup=["name", "kind"], default=True, table=["name", "kind", "area_ha", "photos"],
+                      download=dl_mur["open_spaces"]),
                 layer("access_green", "400 м пешком от парков и скверов", "fill", "#2F7D3A", opacity=0.18,
                       note="Буфер построен для геопортала по методике статьи"),
             ]},
             *([{"title": "Полевые работы 2025", "note": "Точки из полевых дневников и навигатора, июль 2025", "layers": [
                 layer("field_points", "Точки описаний", "circle", FIELD_POINTS_STYLE["color"],
                       legend=FIELD_POINTS_STYLE["legend"], popup=["name", "kind", "note"], default=True,
+                      table=["name", "kind", "note", "photos"],
                       note="У точек с фото по щелчку внизу карты открывается лента снимков"),
             ]}] if (d / "field_points.json").exists() else []),
             {"title": "Застройка и зонирование", "note": "Данные проекта", "layers": [
-                layer("buildings", "Жилые дома", "fill", "#8C6F6A", popup=["address", "floors", "apartments", "year", "condition", "type"]),
+                layer("buildings", "Жилые дома", "fill", "#8C6F6A", popup=["address", "floors", "apartments", "year", "condition", "type"],
+                      table=["address", "floors", "apartments", "year", "condition", "type"]),
                 layer("zones", "Функциональные зоны", "fill", match_expr("zone", ZONES),
-                      legend=legend_from(ZONES, ZONES), popup=["zone"], opacity=0.55),
+                      legend=legend_from(ZONES, ZONES), popup=["zone", "area_ha"], opacity=0.55, table=["zone", "area_ha"]),
             ]},
         ],
     })
@@ -375,6 +389,16 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
                d / "buildings.json", ["address", "floors", "apartments", "year", "people", "condition", "type"], 0.3)
     surface = read(src, "Когалым/Классификация/Kogalym_map_v3_clip.shp")
     to_geojson(with_names(dissolve(surface, "Predicted_", 30, 2.0).rename(columns={"Predicted_": "cls"})), d / "surface.json", ["cls", "name", "area_ha"], 0)
+    # класс «здания» составлен из контуров зданий OpenStreetMap (поле osm_id): слой распространяется по ODbL
+    dl_kog["surface"] = export_layer(
+        surface.assign(cls=surface["Predicted_"], cls_name=surface["Predicted_"].map(lambda c: SURFACE[c][0] if c in SURFACE else None),
+                       osm_id=surface["osm_id"].map(lambda v: str(v).strip() if pd.notna(v) and str(v).strip() else None)), out,
+        city="kogalym", city_title="Когалым", slug="surface", title="Типы поверхности Когалыма",
+        about="Классификация снимка GeoEye-1 от 08.07.2020 по той же методике, что и для Муравленко; контуры зданий взяты из OpenStreetMap.",
+        fields=[("cls", "код класса (латиницей, как в исходной классификации)"), ("cls_name", "класс поверхности"),
+                ("osm_id", "номер здания OpenStreetMap (у класса «здания»)")],
+        license_key="odbl", attribution="© участники OpenStreetMap",
+        cite=f"{GRANT}, типы поверхности Когалыма; © участники OpenStreetMap. {SITE_REF}")
     to_geojson(buffer_union(green, 400), d / "access_green.json", ["label"], 1.0)
     # поле Name в этих шейпах обрезано до 4 символов («КЭ_1» вместо «КЭ_12»), имя собирается из id
     vp = read(src, "Когалым/Точки описаний/Vegetation_points.shp").assign(kind="геоботаническое описание")
@@ -399,7 +423,8 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
             ]},
             {"title": "Типы поверхности и NDVI", "note": "Снимок GeoEye-1, 08.07.2020; публикуются только производные", "layers": [
                 layer("surface", "Классификация типов поверхности", "fill", match_expr("cls", SURFACE),
-                      legend=legend_from(kog_classes, SURFACE), popup=["name"], default=True),
+                      legend=legend_from(kog_classes, SURFACE), popup=["name"], default=True,
+                      table=["name", "area_ha"], download=dl_kog["surface"]),
                 {"id": "ndvi", "title": "Вегетационный индекс NDVI", "type": "image", "file": "ndvi.png",
                  "coordinates": ndvi_corners, "opacity": 0.85, "default": False,
                  "legend": [{"label": "0 и ниже: без растительности", "color": "#9E704A"}, {"label": "0,4", "color": "#BDD673"},
@@ -409,17 +434,19 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
                 layer("open_spaces", "Парки, скверы и площадки", "fill",
                       ["match", ["get", "group"], "green", "#2F7D3A", "#C2410C"],
                       legend=[{"label": "Парки и скверы", "color": "#2F7D3A"}, {"label": "Детские и спортивные площадки", "color": "#C2410C"}],
-                      popup=["name", "kind"], default=True, download=dl_kog["open_spaces"]),
+                      popup=["name", "kind"], default=True, table=["name", "kind", "area_ha", "photos"],
+                      download=dl_kog["open_spaces"]),
                 layer("access_green", "400 м пешком от парков и скверов", "fill", "#2F7D3A", opacity=0.18,
                       note="Буфер построен для геопортала по методике статьи"),
             ]},
             {"title": "Полевые работы 2026", "note": "Точки привязаны по GPS", "layers": [
                 layer("field_points", "Точки описаний", "circle", FIELD_POINTS_STYLE["color"],
-                      legend=FIELD_POINTS_STYLE["legend"], popup=["name", "kind"], default=True,
+                      legend=FIELD_POINTS_STYLE["legend"], popup=["name", "kind"], default=True, table=["name", "kind", "photos"],
                       note="У точек с фото по щелчку внизу карты открывается лента снимков"),
             ]},
             {"title": "Застройка", "note": "Жилые дома с оценкой числа жителей", "layers": [
-                layer("buildings", "Жилые дома", "fill", "#8C6F6A", popup=["address", "floors", "apartments", "people", "year", "condition", "type"]),
+                layer("buildings", "Жилые дома", "fill", "#8C6F6A", popup=["address", "floors", "apartments", "people", "year", "condition", "type"],
+                      table=["address", "floors", "apartments", "people", "year", "condition", "type"]),
             ]},
         ],
     })
@@ -488,7 +515,7 @@ def bounds_of(gdf: gpd.GeoDataFrame) -> list[list[float]]:
 
 def layer(lid: str, title: str, kind: str, color, *, default: bool = False, legend: list | None = None,
           popup: list | None = None, label: str | None = None, width: float = 1.5, opacity: float = 0.7,
-          note: str = "", download: dict | None = None) -> dict:
+          note: str = "", download: dict | None = None, table: list | None = None) -> dict:
     out = {"id": lid, "title": title, "type": kind, "file": f"{lid}.json", "color": color, "default": default,
            "width": width, "opacity": opacity}
     if legend:
@@ -501,6 +528,8 @@ def layer(lid: str, title: str, kind: str, color, *, default: bool = False, lege
         out["note"] = note
     if download:
         out["download"] = download
+    if table:
+        out["table"] = table  # колонки атрибутивной таблицы в геопортале
     return out
 
 

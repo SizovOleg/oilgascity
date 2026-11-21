@@ -13,6 +13,8 @@ from datetime import date
 from pathlib import Path
 
 import geopandas as gpd
+import numpy as np
+import shapely
 
 PROJECT = ("Проект РНФ № 25-27-00022 «Социально-экологические аспекты развития малых городов как центров "
            "нефтегазового освоения в меняющихся климатических условиях субарктической зоны Западной Сибири»")
@@ -51,12 +53,32 @@ def readme(title: str, city: str, about: str, fields: list[tuple[str, str]], cou
     return "\n".join(lines) + "\n"
 
 
+def valid_polygons(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Невалидные контуры исправляются (make_valid), из коллекций остаются только полигоны:
+    Shapefile не хранит смешанные типы, а самопересечения ломают пересчёт площади в ГИС."""
+    bad = ~gdf.geometry.is_valid
+    if not bad.any() or not gdf.geom_type.isin(["Polygon", "MultiPolygon"]).all():
+        return gdf
+    gdf = gdf.copy()
+    fixed = shapely.make_valid(gdf.geometry[bad].values, method="structure", keep_collapsed=False)
+
+    def polygonal(g):  # из коллекции берутся только полигоны (тип 3) и мультиполигоны (тип 6)
+        if g.geom_type != "GeometryCollection":
+            return g
+        parts = shapely.get_parts(g)
+        return shapely.union_all(parts[np.isin(shapely.get_type_id(parts), [3, 6])])
+
+    gdf.loc[bad, "geometry"] = [polygonal(g) for g in fixed]
+    print(f"  исправлено невалидных контуров: {int(bad.sum())}")
+    return gdf[~gdf.geometry.is_empty]
+
+
 def export_layer(gdf: gpd.GeoDataFrame, out: Path, *, city: str, city_title: str, slug: str, title: str,
                  about: str, fields: list[tuple[str, str]], license_key: str, cite: str,
                  attribution: str = "") -> dict:
     """Пишет два zip слоя и возвращает запись `download` для манифеста (адреса относительно /geodata)."""
     cols = [f for f, _ in fields]
-    gdf = gdf[~gdf.geometry.is_empty & gdf.geometry.notna()][cols + ["geometry"]].copy()
+    gdf = valid_polygons(gdf[~gdf.geometry.is_empty & gdf.geometry.notna()][cols + ["geometry"]].copy())
     gdf["area_m2"] = gdf.geometry.area.round(1)
     gdf = gdf.reset_index(drop=True)
     base = f"{city}_{slug}"
