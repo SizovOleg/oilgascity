@@ -93,37 +93,44 @@
 .gp-map-wrap { flex: 1; position: relative; min-width: 0; min-height: 0; }
 .gp-map { position: absolute; inset: 0; }
 
-/* Островок с атрибутивной таблицей: сверху по центру карты, свёрнут в пилюлю или раскрыт */
-.gp-island { position: absolute; top: 0.6rem; left: 50%; transform: translateX(-50%); z-index: 5; max-width: calc(100% - 7rem); background: var(--ink); color: #fff; border-radius: 999px; box-shadow: 0 10px 30px rgba(20, 36, 43, 0.3); transition: border-radius 0.25s; }
-.gp-island.open { width: min(46rem, calc(100% - 7rem)); border-radius: 16px; display: flex; flex-direction: column; max-height: calc(100% - 1.2rem); }
-.gp-island header { display: flex; align-items: center; gap: 0.2rem; padding: 0.2rem 0.3rem 0.2rem 0.35rem; }
-.gp-island-title { font: inherit; font-size: 0.84rem; display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0; border: 0; background: none; color: inherit; cursor: pointer; padding: 0.4rem 0.5rem; text-align: left; }
-.gp-island-title b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.gp-island-title span { opacity: 0.7; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.gp-island-title i { font-style: normal; opacity: 0.7; margin-left: auto; padding-left: 0.3rem; }
-.gp-island-x { font: inherit; font-size: 1.25rem; line-height: 1; width: 1.9rem; height: 1.9rem; flex: none; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.12); color: #fff; cursor: pointer; }
-.gp-island-x:hover, .gp-island-x:focus-visible { background: var(--tape); }
-.gp-island-body { background: #fff; color: var(--ink); border-radius: 11px; margin: 0 0.35rem 0.35rem; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
-@media (prefers-reduced-motion: no-preference) {
-  .gp-island-body { animation: island-in 0.22s ease both; }
-  @keyframes island-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
-}
-.gp-island-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--line); font-size: 0.78rem; }
-.gp-island-tools input[type="search"] { font: inherit; flex: 1; min-width: 9rem; padding: 0.35rem 0.5rem; border: 1.5px solid var(--ink); border-radius: 6px; }
-.gp-island-tools label { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; color: var(--mute); }
-.gp-island-tools label input { accent-color: var(--tape); }
-.gp-island-filter { background: var(--sand); padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 700; }
-.gp-island-scroll { max-height: min(45vh, 26rem); min-height: 0; flex: 1 1 auto; overflow: auto; overscroll-behavior: contain; }
-.gp-island table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
-.gp-island th { position: sticky; top: 0; z-index: 1; background: var(--fog); text-align: left; }
-.gp-island th button { font: inherit; font-weight: 700; width: 100%; border: 0; background: none; padding: 0.45rem 0.55rem; cursor: pointer; color: var(--ink); white-space: nowrap; text-align: inherit; }
-.gp-island td { padding: 0.35rem 0.55rem; border-top: 1px solid var(--fog); vertical-align: top; max-width: 24rem; }
-.gp-island td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.gp-island th.num { text-align: right; }
-.gp-island tbody tr { cursor: pointer; }
-.gp-island tbody tr:hover, .gp-island tbody tr:focus-visible { background: #FBF3EC; outline: none; }
-.gp-island tbody tr.sel { background: var(--sand); }
-.gp-island-msg { margin: 0; padding: 0.7rem; color: var(--mute); font-size: 0.8rem; }
+/* Атрибутивная таблица: пристыкована внизу карты на всю ширину, карта над ней сжимается, высота тянется за край */
+.gp-attr { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; flex-direction: column; background: var(--snow); border-top: 2px solid var(--ink); box-shadow: 0 -6px 18px rgba(20, 36, 43, 0.12); }
+.gp-attr.min { height: 44px; }
+.gp-attr-grip { position: absolute; left: 0; right: 0; top: -7px; height: 12px; z-index: 2; cursor: row-resize; touch-action: none; }
+.gp-attr-grip::after { content: ""; position: absolute; left: 50%; top: 3px; width: 2.6rem; height: 5px; margin-left: -1.3rem; border-radius: 3px; background: var(--ink); opacity: 0.35; transition: opacity 0.15s, background 0.15s; }
+.gp-attr-grip:hover::after, .gp-attr-grip:focus-visible::after, .gp-resizing-y .gp-attr-grip::after { opacity: 1; background: var(--tape); }
+.gp-resizing-y { cursor: row-resize; user-select: none; }
+.gp-resizing-y .gp-map { pointer-events: none; }
+.gp-attr-bar { display: flex; align-items: center; gap: 0.5rem 0.8rem; flex-wrap: wrap; padding: 0.35rem 0.5rem 0.35rem 0.75rem; min-height: 42px; border-bottom: 1px solid var(--line); font-size: 0.8rem; }
+.gp-attr.min .gp-attr-bar { border-bottom: 0; }
+.gp-attr-title { display: inline-flex; align-items: center; gap: 0.45rem; min-width: 0; }
+.gp-attr-title b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.86rem; }
+.gp-attr-title span { color: var(--mute); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gp-attr-bar input[type="search"] { font: inherit; flex: 1 1 12rem; min-width: 8rem; max-width: 22rem; padding: 0.3rem 0.5rem; border: 1.5px solid var(--ink); border-radius: 6px; background: #fff; }
+.gp-attr-view { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; color: var(--mute); white-space: nowrap; }
+.gp-attr-view input { accent-color: var(--tape); }
+.gp-attr-filter { background: var(--sand); padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 700; }
+.gp-attr-btn { font: inherit; font-weight: 700; padding: 0.3rem 0.65rem; border-radius: 999px; border: 1.5px solid var(--ink); background: #fff; color: var(--ink); cursor: pointer; white-space: nowrap; }
+.gp-attr-btn:hover:not(:disabled) { background: var(--ink); color: #fff; }
+.gp-attr-btn:disabled { opacity: 0.4; cursor: default; }
+.gp-attr-icon { font: inherit; font-size: 1.1rem; line-height: 1; width: 1.9rem; height: 1.9rem; flex: none; border-radius: 50%; border: 0; background: var(--fog); color: var(--ink); cursor: pointer; }
+.gp-attr-icon:first-of-type { margin-left: auto; }
+.gp-attr-icon:hover, .gp-attr-icon:focus-visible { background: var(--ink); color: #fff; }
+.gp-attr-scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.gp-attr table { table-layout: fixed; border-collapse: collapse; font-size: 0.78rem; min-width: 100%; }
+.gp-attr th { position: sticky; top: 0; z-index: 1; background: var(--fog); text-align: left; border-bottom: 1px solid var(--line); }
+.gp-attr th + th, .gp-attr td + td { border-left: 1px solid var(--fog); }
+.gp-attr th button { font: inherit; font-weight: 700; width: 100%; height: 28px; border: 0; background: none; padding: 0 0.55rem; cursor: pointer; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: inherit; }
+.gp-attr th button:hover { background: var(--line); }
+.gp-attr td { height: 28px; padding: 0 0.55rem; border-top: 1px solid var(--fog); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gp-attr .num { text-align: right; font-variant-numeric: tabular-nums; }
+.gp-attr td.rn { color: var(--mute); background: #F7F8F7; }
+.gp-attr tbody tr { cursor: pointer; }
+.gp-attr tbody tr:hover, .gp-attr tbody tr:focus-visible { background: #FBF3EC; outline: none; }
+.gp-attr tbody tr.sel, .gp-attr tbody tr.sel td.rn { background: var(--sand); }
+.gp-attr-pad, .gp-attr-pad:hover { background: none !important; cursor: default; }
+.gp-attr-pad td { padding: 0; border: 0; }
+.gp-attr-msg { margin: 0; padding: 0.7rem 0.75rem; color: var(--mute); font-size: 0.8rem; }
 
 /* Лента фото выбранной площадки или парка */
 .gp-strip { position: absolute; left: 0.6rem; right: 0.6rem; bottom: 2rem; z-index: 4; background: var(--snow); border-radius: 8px; box-shadow: 0 10px 30px rgba(20, 36, 43, 0.25); padding: 0.55rem 0.6rem 0.65rem; }
@@ -175,9 +182,14 @@
   .gp-panel { width: auto; max-height: 48vh; border-right: 0; border-top: 2px solid var(--ink); }
   .gp-resize { display: none; }
   .gp-strip { bottom: 0.6rem; }
-  .gp-island { left: 0.6rem; transform: none; max-width: calc(100% - 4.2rem); }
-  .gp-island.open { width: calc(100% - 4.2rem); }
-  .gp-island-scroll { max-height: 38vh; }
+  .gp-attr-bar { gap: 0.35rem 0.5rem; padding-left: 0.5rem; }
+  .gp-attr-title { order: 1; flex: 1 1 calc(100% - 5.2rem); } /* первая строка: название и две кнопки, поиск ниже */
+  .gp-attr-icon { order: 2; }
+  .gp-attr-icon:first-of-type { margin-left: 0; }
+  .gp-attr-bar input[type="search"] { order: 3; flex: 1 1 8rem; max-width: none; }
+  .gp-attr-view { order: 4; }
+  .gp-attr-filter { order: 5; }
+  .gp-attr-btn { display: none; }
   .gp-thumbs img { height: 4.6rem; }
   .gp-lightbox { padding: 3rem 0.4rem; }
   .lb-nav { top: auto; bottom: 1rem; margin-top: 0; }

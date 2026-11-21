@@ -161,7 +161,9 @@ def housing_tab(root: Path, city: str, out_dir: Path, write_geojson) -> dict:
                 {"id": "housing", "title": "Жилые дома по десятилетию постройки", "type": "fill", "file": "housing.json",
                  "color": decade_expr, "default": True, "width": 1, "opacity": 0.85, "popup": popup,
                  "filter": "decade", "legend": [{"label": l, "color": c} for l, c in DECADES],
-                 "table": ["address", "year", "decade", "floors", "apartments", "area", "house_type", "condition", "source"]},
+                 "table": {"cols": [["address", "Адрес"], ["year", "Год постройки"], ["decade", "Десятилетие"],
+                                    ["floors", "Этажей"], ["apartments", "Квартир"], ["area", "Жилая площадь, м²"],
+                                    ["house_type", "Тип"], ["condition", "Состояние"], ["source", "Контур"]]}},
             ]},
             {"title": "Источник контура", "note": "Как дом из реестра связан с контуром здания", "layers": [
                 {"id": "housing_src", "title": "Дома по источнику контура", "type": "fill", "file": "housing.json",

@@ -161,11 +161,11 @@ function Lightbox({ gallery, index, setIndex, onClose }) {
 }
 
 // Панель внизу карты: лента миниатюр выбранной площадки или парка
-function PhotoStrip({ gallery, onOpen, onClose }) {
+function PhotoStrip({ gallery, onOpen, onClose, offset = 0 }) {
   const ref = useRef(null);
   const scroll = (d) => ref.current?.scrollBy({ left: d * ref.current.clientWidth * 0.8, behavior: 'smooth' });
   return (
-    <section className="gp-strip" aria-label={`Фото: ${gallery.title}`}>
+    <section className="gp-strip" aria-label={`Фото: ${gallery.title}`} style={offset ? { bottom: `calc(${offset}px + 0.6rem)` } : undefined}>
       <header>
         <b>{gallery.title}</b>
         <span>{gallery.items.length} фото{gallery.date ? `, ${gallery.date}` : ''}{gallery.note ? `. ${gallery.note}` : ''}</span>
@@ -240,7 +240,8 @@ function addLayer(map, city, layer, ver = '') {
     if (layer.type === 'image') {
       map.addSource(id, { type: 'image', url: `${DATA}/${city}/${layer.file}${ver}`, coordinates: layer.coordinates });
     } else {
-      map.addSource(id, { type: 'geojson', data: `${DATA}/${city}/${layer.file}${ver}` });
+      // generateId: номер объекта в файле, по нему щелчок на карте находит строку атрибутивной таблицы
+      map.addSource(id, { type: 'geojson', data: `${DATA}/${city}/${layer.file}${ver}`, generateId: true });
     }
   }
   for (const l of styleLayers(city, layer)) if (!map.getLayer(l.id)) map.addLayer(l);
@@ -408,33 +409,86 @@ function highlight(map, feature) {
   map.addLayer({ id: `${HL}-pt`, type: 'circle', source: HL, filter: is('Point', 'MultiPoint'), paint: { 'circle-radius': 10, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#C2410C', 'circle-stroke-width': 3 } });
 }
 
+// числа таблицы по-русски с пробелом между тысячами; год, номера и координаты без разделителя
+const PLAIN_NUM = new Set(['year', 'num', 'lon', 'lat']);
 const cellText = (f, v) => {
   if (v === null || v === undefined || v === '' || v === 'None' || v === 'null') return '';
   if (f === 'photos') return Number(v) > 0 ? String(v) : '';
+  if (typeof v === 'number' && !PLAIN_NUM.has(f)) return v.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
   return String(fmt(v));
 };
 
-// Атрибутивная таблица слоя в «островке» над картой: свёрнута в пилюлю или раскрыта; поиск, сортировка,
-// «только в окне карты»; наведение на строку подсвечивает объект, щелчок приближает к нему
-function AttrIsland({ city, layer, ver, filter, mapRef, onPick, onClose }) {
+// Точка внутри полигона (чётность пересечений), для выбора объекта щелчком по слитому на карте слою
+function inPolygon([x, y], geom) {
+  const polys = geom.type === 'Polygon' ? [geom.coordinates] : geom.type === 'MultiPolygon' ? geom.coordinates : [];
+  return polys.some((rings) => {
+    let inside = false;
+    for (const ring of rings) {
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const [xi, yi] = ring[i];
+        const [xj, yj] = ring[j];
+        if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+      }
+    }
+    return inside;
+  });
+}
+
+const ROW_H = 28;
+
+// Атрибутивная таблица слоя, как в ГИС: строка на объект, все поля слоя. Пристыкована внизу карты на всю её
+// ширину (карта над ней сжимается), высота тянется за верхний край. Строки рисуются только видимые, поэтому
+// таблица держит и десятки тысяч объектов. Выбор в обе стороны: строка подсвечивает объект и приближает к нему,
+// щелчок по объекту на карте выделяет его строку. Слой, слитый на карте по классам (типы поверхности), берёт
+// строки из отдельного файла объектов, а геометрию для подсветки догружает порциями.
+function AttrPanel({ city, layer, ver, filter, mapRef, height, minimized, onHeight, onMinimize, onPick, onClose }) {
+  const table = Array.isArray(layer.table) ? { cols: layer.table.map((k) => [k, FIELD_LABELS[k] || k]) } : layer.table;
+  const cols = table.cols;
+  const objects = Boolean(table.src); // строки из файла объектов, геометрия порциями
   const [rows, setRows] = useState(null);
-  const [open, setOpen] = useState(true);
   const [q, setQ] = useState('');
   const [sort, setSort] = useState({ key: null, dir: 1 });
   const [inView, setInView] = useState(false);
   const [view, setView] = useState(null);
   const [sel, setSel] = useState(null);
-  const cols = layer.table;
+  const [top, setTop] = useState(0);
+  const scrollRef = useRef(null);
+  const parts = useRef(new Map()); // порции геометрии: номер -> Promise с FeatureCollection
+  const want = useRef(null); // последняя строка, которую просили подсветить (ответы порций приходят не по порядку)
 
-  // островок пересоздаётся (key) при смене слоя, поэтому начальное состояние сбрасывать здесь не нужно
   useEffect(() => {
     let alive = true;
-    fetch(`${DATA}/${city}/${layer.file}${ver}`)
-      .then((r) => { if (!r.ok) throw new Error(`${layer.file} ${r.status}`); return r.json(); })
-      .then((fc) => { if (alive) setRows(fc.features.map((f, i) => ({ i, f, bb: bboxOf(f.geometry) }))); })
+    const url = `${DATA}/${city}/${objects ? table.src : layer.file}${ver}`;
+    fetch(url)
+      .then((r) => { if (!r.ok) throw new Error(`${url} ${r.status}`); return r.json(); })
+      .then((d) => {
+        if (!alive) return;
+        if (objects) {
+          setRows(d.rows.map((vals, i) => ({ i, p: Object.fromEntries(d.cols.map((c, k) => [c, vals[k]])), bb: d.bbox[i] })));
+        } else {
+          setRows(d.features.map((f, i) => ({ i, p: f.properties, bb: bboxOf(f.geometry), g: f.geometry })));
+        }
+      })
       .catch((e) => { console.error(e); if (alive) setRows([]); });
     return () => { alive = false; };
-  }, [city, layer, ver]);
+  }, [city, layer, ver, objects, table.src]);
+
+  const geomOf = useCallback(async (r) => {
+    if (r.g) return r.g;
+    const k = Math.floor(r.i / table.chunk);
+    if (!parts.current.has(k)) {
+      parts.current.set(k, fetch(`${DATA}/${city}/${table.parts}/${k}.json${ver}`).then((x) => x.json()));
+    }
+    const fc = await parts.current.get(k);
+    return fc.features[r.i % table.chunk]?.geometry || null;
+  }, [city, ver, table.chunk, table.parts]);
+
+  const show = useCallback(async (r) => {
+    want.current = r ? r.i : null;
+    if (!r) { highlight(mapRef.current, null); return; }
+    const g = await geomOf(r);
+    if (want.current === r.i && g) highlight(mapRef.current, { type: 'Feature', properties: {}, geometry: g });
+  }, [geomOf, mapRef]);
 
   // «только в окне карты»: строки отбираются по охвату карты после каждого сдвига
   useEffect(() => {
@@ -446,23 +500,22 @@ function AttrIsland({ city, layer, ver, filter, mapRef, onPick, onClose }) {
     return () => map.off('moveend', upd);
   }, [inView, mapRef]);
 
-  // подсветка снимается при закрытии островка
   useEffect(() => () => highlight(mapRef.current, null), [mapRef]);
 
   const shown = useMemo(() => {
     if (!rows) return [];
     const needle = q.trim().toLowerCase();
     let out = rows.filter((r) => {
-      const p = r.f.properties;
-      if (layer.filter && filter && p[layer.filter] !== filter) return false;
+      if (layer.filter && filter && r.p[layer.filter] !== filter) return false;
       if (inView && view && (r.bb[2] < view[0] || r.bb[0] > view[2] || r.bb[3] < view[1] || r.bb[1] > view[3])) return false;
-      return !needle || cols.some((c) => cellText(c, p[c]).toLowerCase().includes(needle));
+      return !needle || cols.some(([c]) => cellText(c, r.p[c]).toLowerCase().includes(needle));
     });
     if (sort.key) {
       const k = sort.key;
+      const val = (r) => (k === '#' ? r.i : r.p[k]);
       out = [...out].sort((a, b) => {
-        const x = a.f.properties[k];
-        const y = b.f.properties[k];
+        const x = val(a);
+        const y = val(b);
         if (x === null || x === undefined || x === '') return 1;
         if (y === null || y === undefined || y === '') return -1;
         return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'ru', { numeric: true })) * sort.dir;
@@ -471,77 +524,157 @@ function AttrIsland({ city, layer, ver, filter, mapRef, onPick, onClose }) {
     return out;
   }, [rows, q, sort, inView, view, filter, layer, cols]);
 
-  const total = rows ? rows.filter((r) => !(layer.filter && filter && r.f.properties[layer.filter] !== filter)).length : 0;
-  const LIMIT = 1000;
-  const boxRef = useRef(null);
-  const pick = (r) => {
+  const total = rows ? rows.filter((r) => !(layer.filter && filter && r.p[layer.filter] !== filter)).length : 0;
+  // ширина колонок по самому длинному значению в первых строках (таблица с фиксированной раскладкой не прыгает при прокрутке)
+  const widths = useMemo(() => cols.map(([c, label]) => {
+    let n = label.length + 2;
+    for (const r of (rows || []).slice(0, 400)) n = Math.max(n, cellText(c, r.p[c]).length);
+    return Math.min(Math.max(n, 6), 42) + 2;
+  }), [rows, cols]);
+  const numCols = useMemo(() => new Set(cols.filter(([c]) => rows?.some((r) => typeof r.p[c] === 'number')).map(([c]) => c)), [rows, cols]);
+
+  const scrollTo = useCallback((i) => {
+    const el = scrollRef.current;
+    const at = shown.findIndex((r) => r.i === i);
+    if (!el || at < 0) return;
+    const y = at * ROW_H;
+    if (y < el.scrollTop + ROW_H || y > el.scrollTop + el.clientHeight - 2 * ROW_H) el.scrollTop = Math.max(0, y - el.clientHeight / 2);
+  }, [shown]);
+
+  const fly = (r) => {
     const map = mapRef.current;
-    setSel(r.i);
-    highlight(map, r.f);
-    onPick(r.f.properties);
     if (!map) return;
-    // объект встаёт в свободную часть карты: под островком и над лентой фото (она открывается у объектов с фото)
+    const bottom = Number(r.p.photos) > 0 ? 190 : 50; // лента фото встаёт над таблицей
     const h = map.getContainer().clientHeight;
-    const top = (boxRef.current?.getBoundingClientRect().bottom ?? 0) - map.getContainer().getBoundingClientRect().top + 24;
-    const bottom = Number(r.f.properties.photos) > 0 ? 190 : 50;
-    const k = top + bottom > h - 80 ? (h - 80) / (top + bottom) : 1; // на низком экране отступы ужимаются
+    const k = 50 + bottom > h - 60 ? (h - 60) / (50 + bottom) : 1;
     const [x0, y0, x1, y1] = r.bb;
-    map.fitBounds([[x0, y0], [x1, y1]], { padding: { top: top * k, bottom: bottom * k, left: 50, right: 50 }, maxZoom: 17, duration: 700 });
+    map.fitBounds([[x0, y0], [x1, y1]], { padding: { top: 50 * k, bottom: bottom * k, left: 50, right: 50 }, maxZoom: 17, duration: 700 });
   };
-  // числовые колонки (площадь, этажи, год) выравниваются вправо вместе с заголовком
-  const numCols = useMemo(() => new Set(cols.filter((c) => rows?.some((r) => typeof r.f.properties[c] === 'number'))), [rows, cols]);
-  const restore = () => highlight(mapRef.current, rows?.find((r) => r.i === sel)?.f || null);
+  const pick = (r) => {
+    setSel(r.i);
+    show(r);
+    fly(r);
+    onPick(r.p);
+  };
+
+  // щелчок по объекту на карте выделяет его строку
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !rows) return undefined;
+    const base = layerKey(city, layer.id);
+    const onClick = async (e) => {
+      let r = null;
+      if (!objects) {
+        const ids = [`${base}-fill`, base].filter((id) => map.getLayer(id));
+        const hit = map.queryRenderedFeatures(e.point, { layers: ids }).find((h) => h.id !== undefined);
+        if (hit) r = rows[hit.id];
+      } else {
+        const { lng, lat } = e.lngLat;
+        const cand = rows.filter((x) => lng >= x.bb[0] && lng <= x.bb[2] && lat >= x.bb[1] && lat <= x.bb[3])
+          .sort((a, b) => (a.bb[2] - a.bb[0]) * (a.bb[3] - a.bb[1]) - (b.bb[2] - b.bb[0]) * (b.bb[3] - b.bb[1]))
+          .slice(0, 300);
+        for (const x of cand) {
+          const g = await geomOf(x); // порции по очереди: обычно хватает первой
+          if (g && inPolygon([lng, lat], g)) { r = x; break; }
+        }
+      }
+      if (!r) return;
+      setSel(r.i);
+      show(r);
+      if (minimized) onMinimize(false);
+      requestAnimationFrame(() => scrollTo(r.i));
+    };
+    map.on('click', onClick);
+    return () => map.off('click', onClick);
+  }, [mapRef, rows, city, layer, objects, geomOf, show, scrollTo, minimized, onMinimize]);
+
+  // высота: верхний край тянется мышью или пальцем, стрелки на фокусе
+  const startDrag = (e) => {
+    e.preventDefault();
+    const y0 = e.clientY;
+    const h0 = height;
+    const move = (ev) => onHeight(h0 - (ev.clientY - y0));
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      document.body.classList.remove('gp-resizing-y');
+    };
+    document.body.classList.add('gp-resizing-y');
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const keyDrag = (e) => {
+    if (e.key === 'ArrowUp') { e.preventDefault(); onHeight(height + 24); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); onHeight(height - 24); }
+  };
+
   const sortBy = (c) => setSort((s) => (s.key === c ? { key: c, dir: -s.dir } : { key: c, dir: 1 }));
-  const count = rows ? (shown.length === total ? `${total}` : `${shown.length} из ${total}`) : '';
+  const n = (v) => v.toLocaleString('ru-RU');
+  const count = rows ? (shown.length === total ? `${n(total)} объектов` : `${n(shown.length)} из ${n(total)}`) : 'загрузка…';
+  const viewH = height; // высота панели не меньше области строк: рисуется с небольшим запасом
+  const first = Math.max(0, Math.floor(top / ROW_H) - 10);
+  const last = Math.min(shown.length, first + Math.ceil(viewH / ROW_H) + 20);
+  const selRow = sel !== null ? rows?.[sel] : null;
+  const arrow = (c) => (sort.key === c ? (sort.dir > 0 ? ' ↑' : ' ↓') : '');
 
   return (
-    <section className={`gp-island${open ? ' open' : ''}`} aria-label={`Таблица слоя «${layer.title}»`} ref={boxRef}>
-      <header>
-        <button type="button" className="gp-island-title" aria-expanded={open} onClick={() => setOpen((o) => !o)}
-          title={open ? 'Свернуть таблицу' : 'Развернуть таблицу'}>
-          <TableIcon /><b>{layer.title}</b><span>{count}</span><i aria-hidden="true">{open ? '▴' : '▾'}</i>
-        </button>
-        <button type="button" className="gp-island-x" aria-label="Закрыть таблицу" onClick={onClose}>×</button>
-      </header>
-      {open ? (
-        <div className="gp-island-body">
-          <div className="gp-island-tools">
+    <section className={`gp-attr${minimized ? ' min' : ''}`} style={{ height: minimized ? undefined : height }} aria-label={`Атрибутивная таблица слоя «${layer.title}»`}>
+      {!minimized ? (
+        <div className="gp-attr-grip" role="separator" aria-orientation="horizontal" aria-label="Высота таблицы" tabIndex={0}
+          aria-valuenow={Math.round(height)} onPointerDown={startDrag} onKeyDown={keyDrag} title="Потяните, чтобы изменить высоту таблицы" />
+      ) : null}
+      <header className="gp-attr-bar">
+        <span className="gp-attr-title"><TableIcon /><b>{layer.title}</b><span>{count}</span></span>
+        {!minimized ? (
+          <>
             <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск по таблице" aria-label="Поиск по таблице" />
-            <label><input type="checkbox" checked={inView} onChange={(e) => setInView(e.target.checked)} />только в окне карты</label>
-            {layer.filter && filter ? <span className="gp-island-filter">{filter}</span> : null}
-          </div>
-          <div className="gp-island-scroll" onMouseLeave={restore}>
-            {!rows ? <p className="gp-island-msg">Загрузка…</p> : null}
-            {rows && !shown.length ? <p className="gp-island-msg">Нет строк{q ? ' по этому запросу' : ''}.</p> : null}
-            {shown.length ? (
-              <table>
-                <thead>
-                  <tr>
-                    {cols.map((c) => (
-                      <th key={c} className={numCols.has(c) ? 'num' : ''} aria-sort={sort.key === c ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
-                        <button type="button" onClick={() => sortBy(c)}>
-                          {FIELD_LABELS[c] || c}{sort.key === c ? (sort.dir > 0 ? ' ↑' : ' ↓') : ''}
-                        </button>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {shown.slice(0, LIMIT).map((r) => (
-                    <tr key={r.i} className={r.i === sel ? 'sel' : ''} tabIndex={0}
-                      onMouseEnter={() => highlight(mapRef.current, r.f)} onClick={() => pick(r)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(r); } }}>
-                      {cols.map((c) => {
-                        const v = r.f.properties[c];
-                        return <td key={c} className={numCols.has(c) ? 'num' : ''}>{cellText(c, v)}</td>;
-                      })}
-                    </tr>
+            <label className="gp-attr-view"><input type="checkbox" checked={inView} onChange={(e) => setInView(e.target.checked)} />только в окне карты</label>
+            {layer.filter && filter ? <span className="gp-attr-filter">{filter}</span> : null}
+            <button type="button" className="gp-attr-btn" disabled={!selRow} onClick={() => selRow && fly(selRow)} title="Приблизить к выбранному объекту">К выбранному</button>
+          </>
+        ) : null}
+        <button type="button" className="gp-attr-icon" onClick={() => onMinimize(!minimized)}
+          aria-label={minimized ? 'Развернуть таблицу' : 'Свернуть таблицу'} title={minimized ? 'Развернуть' : 'Свернуть'}>{minimized ? '▴' : '▾'}</button>
+        <button type="button" className="gp-attr-icon" onClick={onClose} aria-label="Закрыть таблицу" title="Закрыть">×</button>
+      </header>
+      {!minimized ? (
+        <div className="gp-attr-scroll" ref={scrollRef} onScroll={(e) => setTop(e.currentTarget.scrollTop)} onMouseLeave={() => show(selRow)}>
+          {!rows ? <p className="gp-attr-msg">Загрузка таблицы…</p> : null}
+          {rows && !shown.length ? <p className="gp-attr-msg">Нет строк{q ? ' по этому запросу' : ''}.</p> : null}
+          {shown.length ? (
+            <table style={{ width: `calc(${String(shown.length).length + 3}ch + ${widths.reduce((a, b) => a + b, 0)}ch + ${cols.length + 1} * 1.1rem)` }}>
+              <colgroup>
+                <col style={{ width: `calc(${String(rows.length).length + 3}ch + 1.1rem)` }} />
+                {widths.map((w, k) => <col key={cols[k][0]} style={{ width: `calc(${w}ch + 1.1rem)` }} />)}
+              </colgroup>
+              <thead>
+                <tr>
+                  <th className="num" aria-sort={sort.key === '#' ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
+                    <button type="button" onClick={() => sortBy('#')} title="Номер объекта в слое">№{arrow('#')}</button>
+                  </th>
+                  {cols.map(([c, label]) => (
+                    <th key={c} className={numCols.has(c) ? 'num' : ''} aria-sort={sort.key === c ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
+                      <button type="button" onClick={() => sortBy(c)}>{label}{arrow(c)}</button>
+                    </th>
                   ))}
-                </tbody>
-              </table>
-            ) : null}
-            {shown.length > LIMIT ? <p className="gp-island-msg">Показаны первые {LIMIT}: уточните поиск или включите «только в окне карты».</p> : null}
-          </div>
+                </tr>
+              </thead>
+              <tbody>
+                {first > 0 ? <tr className="gp-attr-pad" style={{ height: first * ROW_H }}><td colSpan={cols.length + 1} /></tr> : null}
+                {shown.slice(first, last).map((r) => (
+                  <tr key={r.i} className={r.i === sel ? 'sel' : ''} tabIndex={0} onMouseEnter={() => show(r)} onClick={() => pick(r)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(r); } }}>
+                    <td className="num rn">{r.i + 1}</td>
+                    {cols.map(([c]) => {
+                      const t = cellText(c, r.p[c]);
+                      return <td key={c} className={numCols.has(c) ? 'num' : ''} title={t.length > 40 ? t : undefined}>{t}</td>;
+                    })}
+                  </tr>
+                ))}
+                {last < shown.length ? <tr className="gp-attr-pad" style={{ height: (shown.length - last) * ROW_H }}><td colSpan={cols.length + 1} /></tr> : null}
+              </tbody>
+            </table>
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -563,7 +696,14 @@ export default function Geoportal() {
   const [opacity, setOpacity] = useState(1);
   const [zoom, setZoom] = useState(null);
   const [bare, setBare] = useState(false); // «только снимок»: векторные слои скрыты, флажки не сбрасываются
-  const [tableId, setTableId] = useState(null); // слой, чья атрибутивная таблица открыта в островке
+  const [tableId, setTableId] = useState(null); // слой, чья атрибутивная таблица открыта внизу карты
+  const [attrMin, setAttrMin] = useState(false); // таблица свёрнута до строки заголовка
+  // высота таблицы: тянется за верхний край, запоминается в браузере (0: 40% высоты карты)
+  const [attrH, setAttrH] = useState(() => {
+    try { return Number(localStorage.getItem('gp-attr-h')) || 0; } catch { return 0; }
+  });
+  const [wrapH, setWrapH] = useState(600);
+  const wrapRef = useRef(null);
   const [panelOpen, setPanelOpen] = useState(() => !window.matchMedia('(max-width: 760px)').matches);
   // ширина панели слоёв: тянется за край мышью или стрелками, запоминается в браузере
   const [panelW, setPanelW] = useState(() => {
@@ -736,6 +876,15 @@ export default function Geoportal() {
     return () => { map.off('click', onClick); map.off('mousemove', onMove); };
   }, [city, tab, visible, galleryFor]);
 
+  // высота области карты: от неё зависят пределы высоты таблицы
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return undefined;
+    const ro = new ResizeObserver(() => setWrapH(el.clientHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [manifest]);
+
   // карта подстраивается под новую ширину панели
   useEffect(() => {
     const id = requestAnimationFrame(() => mapRef.current?.resize());
@@ -788,9 +937,23 @@ export default function Geoportal() {
   const openTable = (l) => {
     if (tableId === l.id) { setTableId(null); return; }
     setTableId(l.id);
+    setAttrMin(false);
     setVisibleState((v) => ({ ...v, [layerKey(city.slug, l.id)]: true }));
   };
   const tableLayer = tab && tableId ? layersOf(tab).find((l) => l.id === tableId && l.table) : null;
+  const clampH = (h) => Math.round(Math.min(Math.max(h, 120), Math.max(120, wrapH - 120)));
+  const attrHeight = clampH(attrH || wrapH * 0.4);
+  const attrBottom = tableLayer ? (attrMin ? 44 : attrHeight) : 0; // карта сжимается над таблицей
+  const setAttrHeight = (h) => {
+    const v = clampH(h);
+    setAttrH(v);
+    try { localStorage.setItem('gp-attr-h', String(v)); } catch { /* хранилище недоступно: высота не запомнится */ }
+  };
+  // карта подстраивается под высоту таблицы
+  useEffect(() => {
+    const id = requestAnimationFrame(() => mapRef.current?.resize());
+    return () => cancelAnimationFrame(id);
+  }, [attrBottom]);
   // выбор снимка: синтез сохраняется, если он есть у нового снимка; издалека карта приближается к снимку
   const pickScene = (id) => {
     const next = id ? city.imagery.find((p) => p.id === id) : null;
@@ -894,15 +1057,16 @@ export default function Geoportal() {
             aria-valuenow={panelW} aria-valuemin={260} aria-valuemax={760} tabIndex={0}
             onPointerDown={startResize} onKeyDown={keyResize} title="Потяните, чтобы изменить ширину панели" />
         ) : null}
-        <div className="gp-map-wrap">
-          <div className="gp-map" ref={boxRef}>
+        <div className="gp-map-wrap" ref={wrapRef}>
+          <div className="gp-map" ref={boxRef} style={attrBottom ? { bottom: attrBottom } : undefined}>
             {error ? <p className="gp-error">Не удалось загрузить данные геопортала. Попробуйте обновить страницу.</p> : null}
           </div>
           {tableLayer && city ? (
-            <AttrIsland key={`${city.slug}-${tableLayer.id}`} city={city.slug} layer={tableLayer} ver={ver} filter={filter}
-              mapRef={mapRef} onPick={(p) => setGallery(galleryFor(p))} onClose={() => setTableId(null)} />
+            <AttrPanel key={`${city.slug}-${tableLayer.id}`} city={city.slug} layer={tableLayer} ver={ver} filter={filter}
+              mapRef={mapRef} height={attrHeight} minimized={attrMin} onHeight={setAttrHeight} onMinimize={setAttrMin}
+              onPick={(p) => setGallery(galleryFor(p))} onClose={() => setTableId(null)} />
           ) : null}
-          {gallery ? <PhotoStrip gallery={gallery} onOpen={setShown} onClose={() => setGallery(null)} /> : null}
+          {gallery ? <PhotoStrip gallery={gallery} onOpen={setShown} onClose={() => setGallery(null)} offset={attrBottom} /> : null}
         </div>
       </div>
       {gallery && shown !== null ? (
