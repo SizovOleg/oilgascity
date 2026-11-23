@@ -1,13 +1,15 @@
+import base64
 from django.conf import settings
 from django.db import models
 from django.http import HttpRequest
-from wagtail.models import Page, Orderable
+from wagtail.models import Orderable, Page, TranslatableMixin
 from wagtail.fields import RichTextField, StreamField
 from wagtail.admin.panels import FieldPanel, MultiFieldPanel, InlinePanel
 from wagtail.api import APIField
 from wagtail.images.api.fields import ImageRenditionField
 from modelcluster.fields import ParentalKey
 from rest_framework.fields import Field
+from wagtail_localize.fields import SynchronizedField, TranslatableField
 
 from .blocks import PassportRowBlock, ReportStreamBlock, StatBlock
 from .renditions import LARGE_SPEC, THUMBNAIL_SPEC
@@ -24,6 +26,8 @@ class FrontendUrlMixin:
 
     # Маршрут страницы во фронтенде; {id} и {slug} заменяются на id и слаг страницы
     frontend_path: str | None = None
+    # Перевод (wagtail-localize): слаг общий для обоих языков, переводятся только тексты
+    override_translatable_fields = [SynchronizedField("slug")]
 
     def get_frontend_path(self) -> str | None:
         if self.frontend_path is None:
@@ -82,6 +86,17 @@ class GallerySerializedField(Field):
         } for item in value.all()]
 
 
+def hide_email(value: str) -> str:
+    """Адрес в API не открытым текстом (его читают сборщики спама): base64 от перевёрнутой строки,
+    сайт раскодирует при показе (frontend/src/lib/email.js)."""
+    return base64.b64encode(value[::-1].encode("utf-8")).decode("ascii") if value else ""
+
+
+class HiddenEmailField(Field):
+    def to_representation(self, value):
+        return hide_email(value)
+
+
 class MembersSerializedField(Field):
     def to_representation(self, value):
         return [{
@@ -92,6 +107,7 @@ class MembersSerializedField(Field):
             'organization': item.organization,
             'bio': item.bio,
             'photo': ImageSerializedField().to_representation(item.photo),
+            'email': hide_email(item.email),
             'orcid': item.orcid,
             'scopus': item.scopus,
             'wos': item.wos,
@@ -167,6 +183,8 @@ class HomePage(FrontendUrlMixin, Page):
     abstract_en = RichTextField("Аннотация на английском", blank=True)
     expected_source = models.CharField("Источник ожидаемых результатов", max_length=300, blank=True)
     years_intro = models.TextField("Вводный текст блока «Результаты по годам»", blank=True)
+    contact_email = models.EmailField("Общий адрес для связи с проектом", blank=True,
+                                      help_text="Показывается в подвале и на главной (на английской версии тоже)")
 
     content_panels = Page.content_panels + [
         MultiFieldPanel([
@@ -189,9 +207,11 @@ class HomePage(FrontendUrlMixin, Page):
         FieldPanel('subtitle'),
         FieldPanel('body'),
         FieldPanel('grant_info'),
+        FieldPanel('contact_email'),
     ]
 
     api_fields = [
+        APIField('contact_email', serializer=HiddenEmailField()),
         APIField('subtitle'),
         APIField('body'),
         APIField('grant_info'),
@@ -245,6 +265,7 @@ class CitiesIndexPage(FrontendUrlMixin, Page):
 
 class CityPage(FrontendUrlMixin, Page):
     frontend_path = "/cities/{slug}"
+    override_translatable_fields = FrontendUrlMixin.override_translatable_fields + [TranslatableField("city_gallery")]
 
     description = RichTextField("Описание города")
     population = models.CharField("Население", max_length=100, blank=True)
@@ -322,7 +343,7 @@ class CityPage(FrontendUrlMixin, Page):
     parent_page_types = ['home.CitiesIndexPage']
 
 
-class CityGalleryImage(PhotoMeta, Orderable):
+class CityGalleryImage(TranslatableMixin, PhotoMeta, Orderable):
     page = ParentalKey(CityPage, on_delete=models.CASCADE, related_name='city_gallery')
     image = models.ForeignKey(
         'wagtailimages.Image', on_delete=models.CASCADE, related_name='+'
@@ -357,6 +378,7 @@ class ExpeditionsIndexPage(FrontendUrlMixin, Page):
 
 class ExpeditionPage(FrontendUrlMixin, Page):
     frontend_path = "/expeditions/{id}"
+    override_translatable_fields = FrontendUrlMixin.override_translatable_fields + [TranslatableField("expedition_gallery")]
 
     date_start = models.DateField("Дата начала")
     date_end = models.DateField("Дата окончания", null=True, blank=True)
@@ -393,7 +415,7 @@ class ExpeditionPage(FrontendUrlMixin, Page):
     parent_page_types = ['home.ExpeditionsIndexPage']
 
 
-class ExpeditionGalleryImage(PhotoMeta, Orderable):
+class ExpeditionGalleryImage(TranslatableMixin, PhotoMeta, Orderable):
     page = ParentalKey(ExpeditionPage, on_delete=models.CASCADE, related_name='expedition_gallery')
     image = models.ForeignKey(
         'wagtailimages.Image', on_delete=models.CASCADE, related_name='+'
@@ -409,6 +431,7 @@ class ExpeditionGalleryImage(PhotoMeta, Orderable):
 # === 4. ПУБЛИКАЦИИ ===
 class PublicationsPage(FrontendUrlMixin, Page):
     frontend_path = "/materials#publications"
+    override_translatable_fields = FrontendUrlMixin.override_translatable_fields + [TranslatableField("publications")]
 
     intro = RichTextField("Вводный текст", blank=True)
 
@@ -428,7 +451,7 @@ class PublicationsPage(FrontendUrlMixin, Page):
     subpage_types = []
 
 
-class Publication(Orderable):
+class Publication(TranslatableMixin, Orderable):
     page = ParentalKey(PublicationsPage, on_delete=models.CASCADE, related_name='publications')
     title = models.CharField("Название", max_length=500)
     authors = models.CharField("Авторы", max_length=500)
@@ -468,10 +491,14 @@ class Publication(Orderable):
         FieldPanel('cover_image'),
     ]
 
+    class Meta(TranslatableMixin.Meta):
+        ordering = ["sort_order"]  # как у Orderable: первым в базах класса стоит миксин перевода
+
 
 # === 5. АВТОРСКИЙ КОЛЛЕКТИВ ===
 class TeamPage(FrontendUrlMixin, Page):
     frontend_path = "/materials#team"
+    override_translatable_fields = FrontendUrlMixin.override_translatable_fields + [TranslatableField("members")]
 
     intro = RichTextField("Вводный текст", blank=True)
 
@@ -491,7 +518,8 @@ class TeamPage(FrontendUrlMixin, Page):
     subpage_types = []
 
 
-class TeamMember(Orderable):
+class TeamMember(TranslatableMixin, Orderable):
+    override_translatable_fields = [SynchronizedField("spin_code")]  # код eLibrary одинаков в обоих языках
     page = ParentalKey(TeamPage, on_delete=models.CASCADE, related_name='members')
     name = models.CharField("ФИО", max_length=300)
     role = models.CharField("Роль в проекте", max_length=300, blank=True)
@@ -502,6 +530,8 @@ class TeamMember(Orderable):
         'wagtailimages.Image', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='+', verbose_name="Фото"
     )
+    email = models.EmailField("E-mail", blank=True,
+                              help_text="Только с согласия участника; на сайте адрес собирается скриптом, в HTML его нет")
     orcid = models.URLField("ORCID", blank=True)
     scopus = models.URLField("Scopus", blank=True)
     wos = models.URLField("Web of Science", blank=True)
@@ -515,6 +545,7 @@ class TeamMember(Orderable):
         FieldPanel('position'),
         FieldPanel('organization'),
         FieldPanel('bio'),
+        FieldPanel('email'),
         MultiFieldPanel([
             FieldPanel('orcid'),
             FieldPanel('scopus'),
@@ -523,6 +554,9 @@ class TeamMember(Orderable):
             FieldPanel('spin_code'),
         ], heading="Академические профили"),
     ]
+
+    class Meta(TranslatableMixin.Meta):
+        ordering = ["sort_order"]  # как у Orderable: первым в базах класса стоит миксин перевода
 
 
 # === 6. БЛОГ ===
@@ -552,6 +586,7 @@ class BlogIndexPage(FrontendUrlMixin, Page):
 
 class BlogPost(FrontendUrlMixin, Page):
     frontend_path = "/news/{id}"
+    override_translatable_fields = FrontendUrlMixin.override_translatable_fields + [TranslatableField("blog_gallery")]
 
     date = models.DateField("Дата публикации")
     body = RichTextField("Текст")
@@ -580,7 +615,7 @@ class BlogPost(FrontendUrlMixin, Page):
     parent_page_types = ['home.BlogIndexPage']
 
 
-class BlogGalleryImage(PhotoMeta, Orderable):
+class BlogGalleryImage(TranslatableMixin, PhotoMeta, Orderable):
     page = ParentalKey(BlogPost, on_delete=models.CASCADE, related_name='blog_gallery')
     image = models.ForeignKey(
         'wagtailimages.Image', on_delete=models.CASCADE, related_name='+'

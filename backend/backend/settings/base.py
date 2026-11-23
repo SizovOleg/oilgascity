@@ -38,6 +38,8 @@ INSTALLED_APPS = [
     "wagtail.search",
     "wagtail.admin",
     "wagtail",
+    "wagtail_localize",
+    "wagtail_localize.locales",  # управление языками в админке (вместо wagtail.locales)
     "modelcluster",
     "taggit",
     "django_filters",
@@ -118,7 +120,14 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = "en-us"
+# Контент на двух языках: основной русский, английский перевод через wagtail-localize
+# (тексты переводятся по сегментам, числа, рисунки и структура страниц общие с русской версией)
+LANGUAGE_CODE = "ru"
+LANGUAGES = WAGTAIL_CONTENT_LANGUAGES = [
+    ("ru", "Русский"),
+    ("en", "English"),
+]
+WAGTAIL_I18N_ENABLED = True
 
 TIME_ZONE = "UTC"
 
