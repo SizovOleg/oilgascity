@@ -64,6 +64,22 @@ MIDDLEWARE = [
     "wagtail.contrib.redirects.middleware.RedirectMiddleware",
 ]
 
+# Защита входа в админку от перебора пароля (django-axes): 5 неудачных попыток для пары «логин и IP»
+# блокируют вход этим логином с этого адреса на 15 минут. IP берётся из X-Real-IP от nginx: за прокси
+# у всех посетителей адрес 127.0.0.1, и перебор с одного адреса заблокировал бы вход всем.
+INSTALLED_APPS += ["axes"]
+MIDDLEWARE += ["axes.middleware.AxesMiddleware"]
+AUTHENTICATION_BACKENDS = [
+    "axes.backends.AxesStandaloneBackend",
+    "django.contrib.auth.backends.ModelBackend",
+]
+AXES_FAILURE_LIMIT = 5
+AXES_COOLOFF_TIME = 0.25  # часы
+AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]
+AXES_RESET_ON_SUCCESS = True
+AXES_CLIENT_IP_CALLABLE = "backend.client_ip.client_ip"
+AXES_DISABLE_ACCESS_LOG = True  # успешные входы не записываются, хранятся только неудачные попытки
+
 ROOT_URLCONF = "backend.urls"
 
 TEMPLATES = [
