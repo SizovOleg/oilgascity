@@ -3,8 +3,10 @@
 export: для опубликованных русских страниц создаёт перевод (черновик английской копии, если его ещё нет)
 и пишет сегменты в <каталог>/<id>-<slug>.po. Родители идут раньше детей, поэтому дерево английских
 страниц повторяет русское.
-import: читает переведённые PO из каталога, загружает строки в перевод страницы и, с ключом --publish,
-публикует английскую страницу. Сегменты без перевода (пустой msgstr) остаются русскими.
+import: читает переведённые PO из каталога (можно выгруженные с копии базы), заводит перевод, если его нет,
+загружает строки и, с ключом --publish, публикует английскую страницу уже с переводом. Сегменты без перевода
+(пустой msgstr) остаются русскими. Выгружать лучше с копии базы: export на рабочей базе через TranslationCreator
+сразу публикует английские копии с русским текстом.
 
 Пример: python manage.py translate_po export --out po/batch1 --page 3 --page 6
         python manage.py translate_po import --in po/batch1 --publish
@@ -84,15 +86,23 @@ class Command(BaseCommand):
             raise CommandError(f"в {src} нет PO-файлов")
         for path in files:
             page = Page.objects.get(id=int(path.name.split("-")[0])).specific
-            tr = self.translation_of(page)
-            if tr is None:
-                raise CommandError(f"{path.name}: перевода нет, сначала export")
+            # перевод заводится напрямую, а не через TranslationCreator: тот сразу публикует английскую копию
+            # с русским текстом, и до загрузки перевода /en показал бы её без пометки «Translation in progress»
+            source, created = TranslationSource.get_or_create_from_instance(page)
+            if not created:
+                source.update_from_db()
+            tr, _ = Translation.objects.update_or_create(source=source, target_locale=self.en, defaults={"enabled": True})
             po = polib.pofile(str(path))
-            warnings = tr.import_po(po)
-            for w in warnings:
+            # PO мог быть выгружен с копии базы: чужой идентификатор перевода import_po молча пропускает весь файл,
+            # строки сопоставляются по контексту и тексту
+            po.metadata.pop("X-WagtailLocalize-TranslationID", None)
+            for w in tr.import_po(po):
                 self.stdout.write(f"  {path.name}: {w}")
+            total, done = tr.get_progress()
+            if not done:
+                self.stdout.write(f"{path.name}: ни одной строки не загружено, страница не создана")
+                continue
             tr.save_target(publish=publish)
-            done = sum(1 for e in po if e.msgstr)
             target = page.get_translation(self.en)
             state = "опубликована" if target.live else "черновик"
-            self.stdout.write(f"{path.name}: переведено {done} из {len(po)}, {state}: {target.url_path}")
+            self.stdout.write(f"{path.name}: переведено {done} из {total}, {state}: {target.url_path}")

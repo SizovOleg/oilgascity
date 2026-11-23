@@ -45,7 +45,8 @@ export function plain(html, limit = 0) {
 
 // Первое число в строке вида «29 529 чел. (01.01.2025, Росстат)» и остаток в скобках
 export function splitFigure(text) {
-  const m = (text || '').match(/^([\d\s,]+[\d])\s*(.*)$/);  // «29 529» и английское «29,529»
+  // «29 529», «0,52» и английские «29,529», «0.52»
+  const m = (text || '').match(/^([\d\s,.]+[\d])\s*(.*)$/);
   if (!m) return { value: text || '', rest: '' };
   return { value: m[1].trim(), rest: m[2].trim() };
 }
