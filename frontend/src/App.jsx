@@ -43,12 +43,13 @@ function pageRoutes(prefix) {
 }
 
 export default function App() {
-  const geo = <Suspense fallback={<Loading />}><Geoportal /></Suspense>;
+  // key: при смене языка карта создаётся заново, и подписи, собранные при создании (атрибуция, подсказки), тоже
+  const geo = (lang) => <Suspense key={lang} fallback={<Loading />}><Geoportal /></Suspense>;
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/geoportal" element={geo} />
-        <Route path="/en/geoportal" element={geo} />
+        <Route path="/geoportal" element={geo('ru')} />
+        <Route path="/en/geoportal" element={geo('en')} />
         <Route path="/en" element={<Layout />}>{pageRoutes('/en')}</Route>
         <Route element={<Layout />}>{pageRoutes('')}</Route>
       </Routes>

@@ -135,6 +135,21 @@ export default function Layout() {
   }, [pathname]);
   // язык документа для чтения с экрана и поисковиков
   useEffect(() => { document.documentElement.lang = lang; }, [lang]);
+  // ссылки на ту же страницу в другом языке для поисковиков; у новостей и экспедиций с id перевод
+  // имеет другой адрес, его пара известна только после запроса к API, поэтому для них ссылок нет
+  useEffect(() => {
+    document.querySelectorAll('link[data-alt-lang]').forEach((el) => el.remove());
+    const base = stripLang(pathname);
+    if (/^\/(news|expeditions)\/\d+$/.test(base)) return;
+    for (const [code, href] of [['ru', base], ['en', localePath('en', base)], ['x-default', base]]) {
+      const link = document.createElement('link');
+      link.rel = 'alternate';
+      link.hreflang = code;
+      link.href = window.location.origin + href;
+      link.dataset.altLang = code;
+      document.head.appendChild(link);
+    }
+  }, [pathname]);
   return (
     <>
       <Header />

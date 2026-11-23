@@ -2,12 +2,15 @@
 // Состав вкладок, слоёв, стили, легенды и графики приходят из /geodata/manifest.json
 // (scripts/geodata/build_geodata.py), поэтому новый слой добавляется без правки этого кода.
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import * as maplibregl from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './geoportal.css';
 import { PinIcon } from '../components/Icons';
+import { LangSwitch } from '../components/Layout';
+import { LLink, currentLang } from '../lib/i18n';
+import { G } from './strings-geo-en';
 
 // maplibre-gl 6 ищет воркер рядом со своим модулем; после сборки Vite его там нет, задаём адрес явно
 maplibregl.setWorkerUrl(workerUrl);
@@ -19,7 +22,8 @@ const BASEMAPS = {
   scheme: { title: 'Схема', style: 'https://tiles.openfreemap.org/styles/positron' },
   satellite: {
     title: 'Снимок Esri',
-    style: {
+    get style() {
+      return {
       version: 8,
       glyphs: GLYPHS,
       sources: {
@@ -28,10 +32,11 @@ const BASEMAPS = {
           tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
           tileSize: 256,
           maxzoom: 19,
-          attribution: 'Снимки © Esri, Maxar, Earthstar Geographics',
+          attribution: G('Снимки © Esri, Maxar, Earthstar Geographics'),
         },
       },
       layers: [{ id: 'esri', type: 'raster', source: 'esri' }],
+      };
     },
   },
 };
@@ -52,17 +57,19 @@ const COMPOSITE_NOTES = {
 
 const layerKey = (city, id) => `${city}-${id}`;
 const sceneKey = (city, prod, comp) => `img-${city}-${prod}-${comp}`;
-const fmt = (v) => (typeof v === 'number' ? String(v).replace('.', ',') : v);
+const en = () => currentLang() === 'en';
+const fmt = (v) => (typeof v === 'number' ? (en() ? String(v) : String(v).replace('.', ',')) : v);
+const numLocale = () => (en() ? 'en-US' : 'ru-RU');
 
 // Старый манифест без вкладок читается как одна вкладка
 const tabsOf = (city) => city.tabs || [{ id: 'green', title: 'Слои', groups: city.groups || [] }];
 const layersOf = (tab) => tab.groups.flatMap((g) => g.layers);
 
-const fmtSize = (bytes) => (bytes >= 1e6 ? `${fmt(Math.round(bytes / 1e5) / 10)} МБ` : `${Math.max(1, Math.round(bytes / 1e3))} КБ`);
+const fmtSize = (bytes) => (bytes >= 1e6 ? `${fmt(Math.round(bytes / 1e5) / 10)} ${G('МБ')}` : `${Math.max(1, Math.round(bytes / 1e3))} ${G('КБ')}`);
 
 // Подсказка вместо примечания: значок у заголовка, текст открывается наведением, фокусом или нажатием
 // и ложится под строкой заголовка (.gp-head) на всю ширину панели. menu: внутри ссылки, а не пояснение.
-function Hint({ children, icon = 'i', label = 'Пояснение', tone = '', menu = false }) {
+function Hint({ children, icon = 'i', label = G('Пояснение'), tone = '', menu = false }) {
   const [pinned, setPinned] = useState(false);
   const ref = useRef(null);
   const id = useId();
@@ -97,15 +104,15 @@ function DownloadIcon() {
 // Скачивание векторного слоя проекта: GeoPackage и Shapefile в zip, лицензия и как ссылаться
 function Download({ dl, ver }) {
   return (
-    <Hint icon={<DownloadIcon />} label="Скачать слой" tone="dl" menu>
-      <b>Скачать слой</b>
+    <Hint icon={<DownloadIcon />} label={G('Скачать слой')} tone="dl" menu>
+      <b>{G('Скачать слой')}</b>
       {dl.files.map((f) => (
         <a key={f.url} href={`${DATA}/${f.url}${ver}`} download>{f.format}<span>zip, {fmtSize(f.size)}</span></a>
       ))}
       <small>
-        {dl.count ? `${dl.count} объектов, исходная геометрия, UTM 43N. ` : ''}
-        Лицензия <a href={dl.license_url} target="_blank" rel="noreferrer">{dl.license}</a>{dl.attribution ? `, ${dl.attribution}` : ''}.
-        {dl.cite ? ` Ссылка: ${dl.cite}.` : ''}
+        {dl.count ? `${G('{n} объектов, исходная геометрия, UTM 43N.', { n: dl.count.toLocaleString(numLocale()) })} ` : ''}
+        {G('Лицензия')} <a href={en() ? dl.license_url.replace(/deed\.ru$/, 'deed.en') : dl.license_url} target="_blank" rel="noreferrer">{dl.license}</a>{dl.attribution ? `, ${G(dl.attribution)}` : ''}.
+        {dl.cite ? ` ${G('Ссылка:')} ${G(dl.cite)}.` : ''}
       </small>
     </Hint>
   );
@@ -140,22 +147,22 @@ function Lightbox({ gallery, index, setIndex, onClose }) {
   }, [index, items]);
   const it = items[index];
   return (
-    <div className="gp-lightbox" role="dialog" aria-modal="true" aria-label={gallery.title} onClick={onClose}>
+    <div className="gp-lightbox" role="dialog" aria-modal="true" aria-label={G(gallery.title)} onClick={onClose}>
       <figure onClick={(e) => e.stopPropagation()}>
         {/* пока грузится полный кадр, на его месте растянута уже загруженная миниатюра */}
-        <img key={it.f} src={it.f} alt={`${gallery.title}, снимок ${index + 1}`} width={it.w} height={it.h}
+        <img key={it.f} src={it.f} alt={G('{t}, снимок {i}', { t: G(gallery.title), i: index + 1 })} width={it.w} height={it.h}
           style={{ backgroundImage: `url("${it.t}")` }} />
         <figcaption>
-          <b>{gallery.title}</b> <span>{index + 1} из {items.length}{gallery.date ? `, ${gallery.date}` : ''}</span>
+          <b>{G(gallery.title)}</b> <span>{G('{i} из {n}', { i: index + 1, n: items.length })}{gallery.date ? `, ${G(gallery.date)}` : ''}</span>
         </figcaption>
       </figure>
       {items.length > 1 ? (
         <>
-          <button type="button" className="lb-nav prev" aria-label="Предыдущий снимок" onClick={(e) => { e.stopPropagation(); go(-1); }}>‹</button>
-          <button type="button" className="lb-nav next" aria-label="Следующий снимок" onClick={(e) => { e.stopPropagation(); go(1); }}>›</button>
+          <button type="button" className="lb-nav prev" aria-label={G('Предыдущий снимок')} onClick={(e) => { e.stopPropagation(); go(-1); }}>‹</button>
+          <button type="button" className="lb-nav next" aria-label={G('Следующий снимок')} onClick={(e) => { e.stopPropagation(); go(1); }}>›</button>
         </>
       ) : null}
-      <button type="button" className="lb-close" aria-label="Закрыть" onClick={onClose}>×</button>
+      <button type="button" className="lb-close" aria-label={G('Закрыть')} onClick={onClose}>×</button>
     </div>
   );
 }
@@ -165,23 +172,23 @@ function PhotoStrip({ gallery, onOpen, onClose, offset = 0 }) {
   const ref = useRef(null);
   const scroll = (d) => ref.current?.scrollBy({ left: d * ref.current.clientWidth * 0.8, behavior: 'smooth' });
   return (
-    <section className="gp-strip" aria-label={`Фото: ${gallery.title}`} style={offset ? { bottom: `calc(${offset}px + 0.6rem)` } : undefined}>
+    <section className="gp-strip" aria-label={G('Фото: {t}', { t: G(gallery.title) })} style={offset ? { bottom: `calc(${offset}px + 0.6rem)` } : undefined}>
       <header>
-        <b>{gallery.title}</b>
-        <span>{gallery.items.length} фото{gallery.date ? `, ${gallery.date}` : ''}{gallery.note ? `. ${gallery.note}` : ''}</span>
-        <button type="button" className="gp-strip-close" aria-label="Закрыть фото" onClick={onClose}>×</button>
+        <b>{G(gallery.title)}</b>
+        <span>{G(`${gallery.items.length} фото`)}{gallery.date ? `, ${G(gallery.date)}` : ''}{gallery.note ? `. ${G(gallery.note)}` : ''}</span>
+        <button type="button" className="gp-strip-close" aria-label={G('Закрыть фото')} onClick={onClose}>×</button>
       </header>
       <div className="gp-strip-row">
-        <button type="button" className="gp-strip-nav" aria-label="Прокрутить назад" onClick={() => scroll(-1)}>‹</button>
+        <button type="button" className="gp-strip-nav" aria-label={G('Прокрутить назад')} onClick={() => scroll(-1)}>‹</button>
         <div className="gp-thumbs" ref={ref}>
           {gallery.items.map((it, i) => (
-            <button key={it.t} type="button" onClick={() => onOpen(i)} aria-label={`Открыть снимок ${i + 1}`}
+            <button key={it.t} type="button" onClick={() => onOpen(i)} aria-label={G('Открыть снимок {i}', { i: i + 1 })}
               onPointerEnter={() => preload(it.f)} onFocus={() => preload(it.f)}>
               <img src={it.t} alt="" loading="lazy" />
             </button>
           ))}
         </div>
-        <button type="button" className="gp-strip-nav" aria-label="Прокрутить вперёд" onClick={() => scroll(1)}>›</button>
+        <button type="button" className="gp-strip-nav" aria-label={G('Прокрутить вперёд')} onClick={() => scroll(1)}>›</button>
       </div>
     </section>
   );
@@ -192,9 +199,9 @@ function popupHtml(layer, props) {
   const rows = (layer.popup || []).filter((f) => props[f] !== null && props[f] !== undefined && props[f] !== '' && props[f] !== 'None' && props[f] !== 'null');
   const title = rows.find((f) => f === 'name' || f === 'address' || f === 'formation');
   const body = rows.filter((f) => f !== title)
-    .map((f) => `<div><span>${FIELD_LABELS[f] || f}</span> ${esc(fmt(props[f]))}</div>`).join('');
-  const photos = Number(props.photos) > 0 ? `<div class="gp-pop-ph">Фото: ${Number(props.photos)}, лента внизу карты</div>` : '';
-  return `<div class="gp-pop"><b>${esc(title ? props[title] : layer.title)}</b>${body}${photos}<small>${esc(layer.title)}</small></div>`;
+    .map((f) => `<div><span>${esc(G(FIELD_LABELS[f] || f))}</span> ${esc(G(fmt(props[f])))}</div>`).join('');
+  const photos = Number(props.photos) > 0 ? `<div class="gp-pop-ph">${esc(G('Фото: {n}, лента внизу карты', { n: Number(props.photos) }))}</div>` : '';
+  return `<div class="gp-pop"><b>${esc(G(title ? props[title] : layer.title))}</b>${body}${photos}<small>${esc(G(layer.title))}</small></div>`;
 }
 
 // Слои MapLibre для одного слоя манифеста
@@ -283,6 +290,7 @@ function setVisible(map, city, layer, visible, filter) {
 
 function Legend({ layer, filter, onFilter }) {
   const items = layer.legend || (typeof layer.color === 'string' ? [{ label: layer.title, color: layer.color }] : []);
+  // значение фильтра (it.label) из данных, на экране его перевод
   if (!items.length) return null;
   return (
     <ul className="gp-legend">
@@ -291,9 +299,9 @@ function Legend({ layer, filter, onFilter }) {
           {layer.filter ? (
             <button type="button" className={filter === it.label ? 'on' : ''} aria-pressed={filter === it.label}
               onClick={() => onFilter(filter === it.label ? null : it.label)}>
-              <i style={{ background: it.color }} />{it.label}
+              <i style={{ background: it.color }} />{G(it.label)}
             </button>
-          ) : <><i style={{ background: it.color }} />{it.label}</>}
+          ) : <><i style={{ background: it.color }} />{G(it.label)}</>}
         </li>
       ))}
     </ul>
@@ -312,49 +320,49 @@ function ImageryPicker({ city, prod, comp, zoom, opacity, bare, onPick, onComp, 
   return (
     <section className="gp-group gp-imagery">
       <div className="gp-head">
-        <h3>Снимки проекта</h3>
-        <Hint label="О снимках">
-          Исходные многоканальные сцены и съёмка с беспилотника. Снимок ложится под слои карты.
-          {prod ? ` Выбран: ${prod.title}, разрешение ${prod.res}.${prod.credit ? ` ${prod.credit}.` : ''}` : ''}
+        <h3>{G('Снимки проекта')}</h3>
+        <Hint label={G('О снимках')}>
+          {G('Исходные многоканальные сцены и съёмка с беспилотника. Снимок ложится под слои карты.')}
+          {prod ? `${G(' Выбран: {t}, разрешение {r}.', { t: G(prod.title), r: G(prod.res) })}${prod.credit ? ` ${G(prod.credit)}.` : ''}` : ''}
         </Hint>
       </div>
       <div className="gp-head gp-pick">
-        <select value={prod?.id || ''} onChange={(e) => onPick(e.target.value)} aria-label="Снимок">
-          <option value="">Без снимка</option>
+        <select value={prod?.id || ''} onChange={(e) => onPick(e.target.value)} aria-label={G('Снимок')}>
+          <option value="">{G('Без снимка')}</option>
           {groups.map(([title, list]) => (
-            <optgroup key={title} label={title}>
-              {list.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
+            <optgroup key={title} label={G(title)}>
+              {list.map((p) => <option key={p.id} value={p.id}>{G(p.title)}</option>)}
             </optgroup>
           ))}
         </select>
-        {prod?.note ? <Hint icon="!" tone="warn" label="Оговорка о качестве снимка">{prod.note}</Hint> : null}
+        {prod?.note ? <Hint icon="!" tone="warn" label={G('Оговорка о качестве снимка')}>{G(prod.note)}</Hint> : null}
       </div>
       {prod ? (
         <>
           {prod.composites.length > 1 ? (
             <div className="gp-head">
-              <div className="gp-comp" role="radiogroup" aria-label="Цветовой синтез">
+              <div className="gp-comp" role="radiogroup" aria-label={G('Цветовой синтез')}>
                 {prod.composites.map((c) => (
-                  <button key={c.id} type="button" role="radio" aria-checked={c.id === comp.id} onClick={() => onComp(c.id)}>{c.title}</button>
+                  <button key={c.id} type="button" role="radio" aria-checked={c.id === comp.id} onClick={() => onComp(c.id)}>{G(c.title)}</button>
                 ))}
               </div>
-              {COMPOSITE_NOTES[comp.id] ? <Hint label="Что показывает синтез">{COMPOSITE_NOTES[comp.id]}</Hint> : null}
+              {COMPOSITE_NOTES[comp.id] ? <Hint label={G('Что показывает синтез')}>{G(COMPOSITE_NOTES[comp.id])}</Hint> : null}
             </div>
           ) : null}
           {prod.legend ? (
             <div className="gp-ramp">
               <i style={{ background: `linear-gradient(90deg, ${prod.legend.map((l) => l.color).join(', ')})` }} />
-              <span>{prod.legend[0].label}</span><span>{prod.legend[prod.legend.length - 1].label}</span>
+              <span>{G(prod.legend[0].label)}</span><span>{G(prod.legend[prod.legend.length - 1].label)}</span>
             </div>
           ) : null}
-          {far ? <p className="gp-filter">Снимок виден при более крупном масштабе: приблизьте карту.</p> : null}
+          {far ? <p className="gp-filter">{G('Снимок виден при более крупном масштабе: приблизьте карту.')}</p> : null}
           <label className="gp-opacity">
-            Непрозрачность
+            {G('Непрозрачность')}
             <input type="range" min="0.2" max="1" step="0.05" value={opacity} onChange={(e) => onOpacity(Number(e.target.value))} />
           </label>
           <label className="gp-bare">
             <input type="checkbox" checked={bare} onChange={(e) => onBare(e.target.checked)} />
-            Только снимок, без слоёв карты
+            {G('Только снимок, без слоёв карты')}
           </label>
         </>
       ) : null}
@@ -362,24 +370,29 @@ function ImageryPicker({ city, prod, comp, zoom, opacity, bare, onPick, onComp, 
   );
 }
 
+// Слово «дом» после числа: 1 дом, 2 дома, 5 домов. Единица отдельным ключом: в английском единственное число
+// только у 1, а русская форма «дом» бывает и у 21
+const RU_FORMS = new Intl.PluralRules('ru-RU');
+const houses = (n) => (n === 1 ? '1 дом' : `{n} ${{ one: 'дом', few: 'дома' }[RU_FORMS.select(n)] || 'домов'}`);
+
 // График «Когда строился город»: столбцы по десятилетиям, щелчок выбирает дома десятилетия на карте
 function DecadeChart({ chart, filter, onFilter }) {
   const max = Math.max(...chart.bars.map((b) => b.value), 1);
   return (
     <figure className="gp-chart">
       <figcaption className="gp-head">
-        <span><b>{chart.title}</b><span>{chart.unit}</span></span>
-        <Hint label="О графике">{chart.note} Щелчок по столбцу показывает дома этого десятилетия.</Hint>
+        <span><b>{G(chart.title)}</b><span>{G(chart.unit)}</span></span>
+        <Hint label={G('О графике')}>{G(chart.note)} {G('Щелчок по столбцу показывает дома этого десятилетия.')}</Hint>
       </figcaption>
-      <div className="gp-bars" role="group" aria-label={chart.title}>
+      <div className="gp-bars" role="group" aria-label={G(chart.title)}>
         {chart.bars.map((b) => (
           <button key={b.label} type="button" aria-pressed={filter === b.label}
             className={filter && filter !== b.label ? 'dim' : ''}
             onClick={() => onFilter(filter === b.label ? null : b.label)}
-            title={`${b.label}: ${fmt(b.value)} тыс. м², ${b.count} домов`}>
+            title={G(`{l}: {v} тыс. м², ${houses(b.count)}`, { l: G(b.label), v: fmt(b.value), n: b.count })}>
             <span className="v">{fmt(b.value)}</span>
             <span className="gp-col" style={{ height: `${Math.max(3, (b.value / max) * 100)}%`, background: b.color }} />
-            <span className="l">{b.label}</span>
+            <span className="l">{G(b.label)}</span>
           </button>
         ))}
       </div>
@@ -434,13 +447,13 @@ function highlight(map, feature) {
   map.addLayer({ id: `${HL}-pt`, type: 'circle', source: HL, filter: is('Point', 'MultiPoint'), paint: { 'circle-radius': 10, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#C2410C', 'circle-stroke-width': 3 } });
 }
 
-// числа таблицы по-русски с пробелом между тысячами; год, номера и координаты без разделителя
+// числа таблицы с разделителем тысяч по языку страницы; год, номера и координаты без разделителя
 const PLAIN_NUM = new Set(['year', 'num', 'lon', 'lat']);
 const cellText = (f, v) => {
   if (v === null || v === undefined || v === '' || v === 'None' || v === 'null') return '';
   if (f === 'photos') return Number(v) > 0 ? String(v) : '';
-  if (typeof v === 'number' && !PLAIN_NUM.has(f)) return v.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
-  return String(fmt(v));
+  if (typeof v === 'number' && !PLAIN_NUM.has(f)) return v.toLocaleString(numLocale(), { maximumFractionDigits: 2 });
+  return typeof v === 'string' ? G(v) : String(fmt(v));
 };
 
 // Точка внутри полигона (чётность пересечений), для выбора объекта щелчком по слитому на карте слою
@@ -467,8 +480,8 @@ const ROW_H = 28;
 // щелчок по объекту на карте выделяет его строку. Слой, слитый на карте по классам (типы поверхности), берёт
 // строки из отдельного файла объектов, а геометрию для подсветки догружает порциями.
 function AttrPanel({ city, layer, ver, filter, mapRef, height, minimized, onHeight, onMinimize, onPick, onClose }) {
-  const table = Array.isArray(layer.table) ? { cols: layer.table.map((k) => [k, FIELD_LABELS[k] || k]) } : layer.table;
-  const cols = table.cols;
+  const table = useMemo(() => (Array.isArray(layer.table) ? { cols: layer.table.map((k) => [k, FIELD_LABELS[k] || k]) } : layer.table), [layer]);
+  const cols = useMemo(() => table.cols.map(([c, label]) => [c, G(label)]), [table]);
   const objects = Boolean(table.src); // строки из файла объектов, геометрия порциями
   const [rows, setRows] = useState(null);
   const [q, setQ] = useState('');
@@ -590,8 +603,8 @@ function AttrPanel({ city, layer, ver, filter, mapRef, height, minimized, onHeig
   };
   const autoCol = (c) => { const next = { ...userW }; delete next[c]; setUserW(next); saveW(next); };
   const resizer = (c, label) => (
-    <span className="gp-col-rs" role="separator" aria-orientation="vertical" aria-label={`Ширина колонки «${label}»`}
-      title="Потяните, чтобы изменить ширину; двойной щелчок вернёт ширину по содержимому"
+    <span className="gp-col-rs" role="separator" aria-orientation="vertical" aria-label={G('Ширина колонки «{t}»', { t: label })}
+      title={G('Потяните, чтобы изменить ширину; двойной щелчок вернёт ширину по содержимому')}
       onPointerDown={(e) => startCol(e, c)} onDoubleClick={() => autoCol(c)} onClick={(e) => e.stopPropagation()} />
   );
   const numCols = useMemo(() => new Set(cols.filter(([c]) => rows?.some((r) => typeof r.p[c] === 'number')).map(([c]) => c)), [rows, cols]);
@@ -676,8 +689,8 @@ function AttrPanel({ city, layer, ver, filter, mapRef, height, minimized, onHeig
   };
 
   const sortBy = (c) => setSort((s) => (s.key === c ? { key: c, dir: -s.dir } : { key: c, dir: 1 }));
-  const n = (v) => v.toLocaleString('ru-RU');
-  const count = rows ? (shown.length === total ? `${n(total)} объектов` : `${n(shown.length)} из ${n(total)}`) : 'загрузка…';
+  const n = (v) => v.toLocaleString(numLocale());
+  const count = rows ? (shown.length === total ? G('{n} объектов', { n: n(total) }) : G('{a} из {b}', { a: n(shown.length), b: n(total) })) : G('загрузка…');
   const viewH = height; // высота панели не меньше области строк: рисуется с небольшим запасом
   const first = Math.max(0, Math.floor(top / ROW_H) - 10);
   const last = Math.min(shown.length, first + Math.ceil(viewH / ROW_H) + 20);
@@ -685,29 +698,29 @@ function AttrPanel({ city, layer, ver, filter, mapRef, height, minimized, onHeig
   const arrow = (c) => (sort.key === c ? (sort.dir > 0 ? ' ↑' : ' ↓') : '');
 
   return (
-    <section className={`gp-attr${minimized ? ' min' : ''}`} style={{ height: minimized ? undefined : height }} aria-label={`Атрибутивная таблица слоя «${layer.title}»`}>
+    <section className={`gp-attr${minimized ? ' min' : ''}`} style={{ height: minimized ? undefined : height }} aria-label={G('Атрибутивная таблица слоя «{t}»', { t: G(layer.title) })}>
       {!minimized ? (
-        <div className="gp-attr-grip" role="separator" aria-orientation="horizontal" aria-label="Высота таблицы" tabIndex={0}
-          aria-valuenow={Math.round(height)} onPointerDown={startDrag} onKeyDown={keyDrag} title="Потяните, чтобы изменить высоту таблицы" />
+        <div className="gp-attr-grip" role="separator" aria-orientation="horizontal" aria-label={G('Высота таблицы')} tabIndex={0}
+          aria-valuenow={Math.round(height)} onPointerDown={startDrag} onKeyDown={keyDrag} title={G('Потяните, чтобы изменить высоту таблицы')} />
       ) : null}
       <header className="gp-attr-bar">
-        <span className="gp-attr-title"><TableIcon /><b>{layer.title}</b><span>{count}</span></span>
+        <span className="gp-attr-title"><TableIcon /><b>{G(layer.title)}</b><span>{count}</span></span>
         {!minimized ? (
           <>
-            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск по таблице" aria-label="Поиск по таблице" />
-            <label className="gp-attr-view"><input type="checkbox" checked={inView} onChange={(e) => setInView(e.target.checked)} />только в окне карты</label>
-            {layer.filter && filter ? <span className="gp-attr-filter">{filter}</span> : null}
-            <button type="button" className="gp-attr-btn" disabled={!selRow} onClick={() => selRow && fly(selRow)} title="Приблизить к выбранному объекту">К выбранному</button>
+            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={G('Поиск по таблице')} aria-label={G('Поиск по таблице')} />
+            <label className="gp-attr-view"><input type="checkbox" checked={inView} onChange={(e) => setInView(e.target.checked)} />{G('только в окне карты')}</label>
+            {layer.filter && filter ? <span className="gp-attr-filter">{G(filter)}</span> : null}
+            <button type="button" className="gp-attr-btn" disabled={!selRow} onClick={() => selRow && fly(selRow)} title={G('Приблизить к выбранному объекту')}>{G('К выбранному')}</button>
           </>
         ) : null}
         <button type="button" className="gp-attr-icon" onClick={() => onMinimize(!minimized)}
-          aria-label={minimized ? 'Развернуть таблицу' : 'Свернуть таблицу'} title={minimized ? 'Развернуть' : 'Свернуть'}>{minimized ? '▴' : '▾'}</button>
-        <button type="button" className="gp-attr-icon" onClick={onClose} aria-label="Закрыть таблицу" title="Закрыть">×</button>
+          aria-label={G(minimized ? 'Развернуть таблицу' : 'Свернуть таблицу')} title={G(minimized ? 'Развернуть' : 'Свернуть')}>{minimized ? '▴' : '▾'}</button>
+        <button type="button" className="gp-attr-icon" onClick={onClose} aria-label={G('Закрыть таблицу')} title={G('Закрыть')}>×</button>
       </header>
       {!minimized ? (
         <div className="gp-attr-scroll" ref={scrollRef} onScroll={(e) => setTop(e.currentTarget.scrollTop)} onMouseLeave={() => show(selRow)}>
-          {!rows ? <p className="gp-attr-msg">Загрузка таблицы…</p> : null}
-          {rows && !shown.length ? <p className="gp-attr-msg">Нет строк{q ? ' по этому запросу' : ''}.</p> : null}
+          {!rows ? <p className="gp-attr-msg">{G('Загрузка таблицы…')}</p> : null}
+          {rows && !shown.length ? <p className="gp-attr-msg">{G(q ? 'Нет строк по этому запросу.' : 'Нет строк.')}</p> : null}
           {shown.length ? (
             <table style={{ width: keys.reduce((a, c) => a + widthOf(c), 0) }}>
               <colgroup>
@@ -716,8 +729,8 @@ function AttrPanel({ city, layer, ver, filter, mapRef, height, minimized, onHeig
               <thead>
                 <tr>
                   <th className="num" aria-sort={sort.key === '#' ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
-                    <button type="button" onClick={() => sortBy('#')} title="Номер объекта в слое">№{arrow('#')}</button>
-                    {resizer('#', '№')}
+                    <button type="button" onClick={() => sortBy('#')} title={G('Номер объекта в слое')}>{G('№')}{arrow('#')}</button>
+                    {resizer('#', G('№'))}
                   </th>
                   {cols.map(([c, label]) => (
                     <th key={c} className={numCols.has(c) ? 'num' : ''} aria-sort={sort.key === c ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
@@ -788,7 +801,10 @@ export default function Geoportal() {
   const prod = scene && city && scene.city === city.slug ? city.imagery?.find((p) => p.id === scene.id) : null;
   const comp = prod ? prod.composites.find((c) => c.id === scene.comp) || prod.composites[0] : null;
 
-  useEffect(() => { document.title = 'Геопортал. OilGasCity'; }, []);
+  useEffect(() => {
+    document.title = G('Геопортал. OilGasCity');
+    document.documentElement.lang = currentLang();
+  }, []);
 
   useEffect(() => {
     // манифест сверяется с сервером при каждом открытии: после обновления слоёв браузер не держит старый
@@ -812,7 +828,7 @@ export default function Geoportal() {
       style: BASEMAPS.scheme.style,
       bounds: first.bounds,
       fitBoundsOptions: { padding: 40 },
-      attributionControl: { compact: true, customAttribution: 'Данные: проект РНФ № 25-27-00022' },
+      attributionControl: { compact: true, customAttribution: G('Данные: проект РНФ № 25-27-00022') },
     });
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), 'top-right');
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
@@ -927,7 +943,7 @@ export default function Geoportal() {
       const hit = hits[i];
       const layer = layers.find((l) => hitLayerIds(city.slug, l).includes(hit.layer.id));
       const more = hits.length > 1
-        ? `<div class="gp-pop-more">${i + 1} из ${hits.length} в этом месте: щёлкните ещё раз, чтобы показать следующий</div>` : '';
+        ? `<div class="gp-pop-more">${G('{i} из {n} в этом месте: щёлкните ещё раз, чтобы показать следующий', { i: i + 1, n: hits.length })}</div>` : '';
       new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(e.lngLat).setHTML(popupHtml(layer, hit.properties) + more).addTo(map);
       // у площадки или парка с фото внизу открывается лента миниатюр
       setGallery(galleryFor(hit.properties));
@@ -1035,44 +1051,45 @@ export default function Geoportal() {
   return (
     <div className="gp">
       <header className="gp-bar">
-        <Link className="gp-back" to="/">OilGasCity<span>на сайт проекта</span></Link>
-        <h1><PinIcon />Геопортал</h1>
+        <LLink className="gp-back" to="/">OilGasCity<span>{G('на сайт проекта')}</span></LLink>
+        <h1><PinIcon />{G('Геопортал')}</h1>
         {manifest ? (
-          <nav className="gp-cities" aria-label="Город">
+          <nav className="gp-cities" aria-label={G('Город')}>
             {manifest.cities.map((c) => (
               <button key={c.slug} type="button" aria-pressed={c.slug === city?.slug}
-                onClick={() => go({ city: c.slug })}>{c.title}</button>
+                onClick={() => go({ city: c.slug })}>{G(c.title)}</button>
             ))}
           </nav>
         ) : null}
+        <LangSwitch className="gp-lang" />
         <button type="button" className="gp-toggle" onClick={() => setPanelOpen((o) => !o)} aria-expanded={panelOpen}>
-          {panelOpen ? 'Скрыть слои' : 'Слои'}
+          {G(panelOpen ? 'Скрыть слои' : 'Слои')}
         </button>
       </header>
       <div className="gp-body">
         {panelOpen && city && tab ? (
-          <aside className="gp-panel" aria-label="Слои карты" style={{ '--panel-w': `${panelW}px` }}>
+          <aside className="gp-panel" aria-label={G('Слои карты')} style={{ '--panel-w': `${panelW}px` }}>
             <div className="gp-city">
               <div className="gp-head">
-                <h2>{city.title}</h2>
-                {tab.about || city.about ? <Hint label="О картах">{tab.about || city.about}</Hint> : null}
+                <h2>{G(city.title)}</h2>
+                {tab.about || city.about ? <Hint label={G('О картах')}>{G(tab.about || city.about)}</Hint> : null}
               </div>
-              <p className="gp-region">{city.region}</p>
+              <p className="gp-region">{G(city.region)}</p>
             </div>
             {tabs.length > 1 ? (
-              <div className="gp-tabs" role="tablist" aria-label="Тема карты">
+              <div className="gp-tabs" role="tablist" aria-label={G('Тема карты')}>
                 {tabs.map((t) => (
-                  <button key={t.id} type="button" role="tab" aria-selected={t.id === tab.id} onClick={() => go({ tab: t.id })}>{t.title}</button>
+                  <button key={t.id} type="button" role="tab" aria-selected={t.id === tab.id} onClick={() => go({ tab: t.id })}>{G(t.title)}</button>
                 ))}
               </div>
             ) : null}
             {tab.facts?.length ? (
-              <ul className="gp-facts">{tab.facts.map((f, i) => <li key={i}><b>{f.value}</b>{f.label}</li>)}</ul>
+              <ul className="gp-facts">{tab.facts.map((f, i) => <li key={i}><b>{G(f.value)}</b>{G(f.label)}</li>)}</ul>
             ) : null}
             {tab.chart ? <DecadeChart chart={tab.chart} filter={filter} onFilter={setFilter} /> : null}
-            <div className="gp-base" role="group" aria-label="Подложка">
+            <div className="gp-base" role="group" aria-label={G('Подложка')}>
               {Object.entries(BASEMAPS).map(([k, b]) => (
-                <button key={k} type="button" aria-pressed={k === basemap} onClick={() => switchBasemap(k)}>{b.title}</button>
+                <button key={k} type="button" aria-pressed={k === basemap} onClick={() => switchBasemap(k)}>{G(b.title)}</button>
               ))}
             </div>
             {city.imagery?.length ? (
@@ -1082,8 +1099,8 @@ export default function Geoportal() {
             {tab.groups.map((g) => (
               <section className="gp-group" key={g.title}>
                 <div className="gp-head">
-                  <h3>{g.title}</h3>
-                  {g.note ? <Hint label={`О группе «${g.title}»`}>{g.note}</Hint> : null}
+                  <h3>{G(g.title)}</h3>
+                  {g.note ? <Hint label={G('О группе «{t}»', { t: G(g.title) })}>{G(g.note)}</Hint> : null}
                 </div>
                 {g.layers.map((l) => {
                   const id = layerKey(city.slug, l.id);
@@ -1092,14 +1109,14 @@ export default function Geoportal() {
                       <div className="gp-head">
                         <label>
                           <input type="checkbox" checked={Boolean(visible[id])} onChange={() => toggle(id)} />
-                          {l.title}
+                          {G(l.title)}
                         </label>
-                        {l.note ? <Hint label={`О слое «${l.title}»`}>{l.note}</Hint> : null}
+                        {l.note ? <Hint label={G('О слое «{t}»', { t: G(l.title) })}>{G(l.note)}</Hint> : null}
                         {l.table || l.download ? (
                           <span className="gp-tools">
                             {l.table ? (
                               <button type="button" className="gp-tool" aria-pressed={tableId === l.id}
-                                aria-label={`Таблица слоя «${l.title}»`} title="Атрибутивная таблица" onClick={() => openTable(l)}>
+                                aria-label={G('Таблица слоя «{t}»', { t: G(l.title) })} title={G('Атрибутивная таблица')} onClick={() => openTable(l)}>
                                 <TableIcon />
                               </button>
                             ) : null}
@@ -1113,18 +1130,18 @@ export default function Geoportal() {
                 })}
               </section>
             ))}
-            {filter ? <p className="gp-filter">Показаны дома: {filter}. <button type="button" onClick={() => setFilter(null)}>Показать все</button></p> : null}
-            <p className="gp-source">Источник: {tab.source || city.source}. <Link to={`/cities/${city.slug}`}>Страница города</Link>, <Link to="/materials#maps">карты в материалах</Link>.</p>
+            {filter ? <p className="gp-filter">{G('Показаны дома: {f}.', { f: G(filter) })} <button type="button" onClick={() => setFilter(null)}>{G('Показать все')}</button></p> : null}
+            <p className="gp-source">{G('Источник:')} {G(tab.source || city.source)}. <LLink to={`/cities/${city.slug}`}>{G('Страница города')}</LLink>, <LLink to="/materials#maps">{G('карты в материалах')}</LLink>.</p>
           </aside>
         ) : null}
         {panelOpen && city && tab ? (
-          <div className="gp-resize" role="separator" aria-orientation="vertical" aria-label="Ширина панели слоёв"
+          <div className="gp-resize" role="separator" aria-orientation="vertical" aria-label={G('Ширина панели слоёв')}
             aria-valuenow={panelW} aria-valuemin={260} aria-valuemax={760} tabIndex={0}
-            onPointerDown={startResize} onKeyDown={keyResize} title="Потяните, чтобы изменить ширину панели" />
+            onPointerDown={startResize} onKeyDown={keyResize} title={G('Потяните, чтобы изменить ширину панели')} />
         ) : null}
         <div className="gp-map-wrap" ref={wrapRef}>
           <div className="gp-map" ref={boxRef} style={attrBottom ? { bottom: attrBottom } : undefined}>
-            {error ? <p className="gp-error">Не удалось загрузить данные геопортала. Попробуйте обновить страницу.</p> : null}
+            {error ? <p className="gp-error">{G('Не удалось загрузить данные геопортала. Попробуйте обновить страницу.')}</p> : null}
           </div>
           {tableLayer && city ? (
             <AttrPanel key={`${city.slug}-${tableLayer.id}`} city={city.slug} layer={tableLayer} ver={ver} filter={filter}
