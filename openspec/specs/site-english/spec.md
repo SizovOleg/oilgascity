@@ -1,7 +1,8 @@
 # site-english Specification
 
 ## Purpose
-TBD - created by archiving change site-english-version. Update Purpose after archive.
+Английская версия сайта и геопортала (/en): перевод страниц 1:1, показ страниц без перевода, контакты авторов,
+английский интерфейс и README геопортала.
 
 ## Requirements
 
