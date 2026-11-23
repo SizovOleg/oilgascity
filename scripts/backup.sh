@@ -5,7 +5,6 @@
 # Запуск: таймер oilgascity-backup.timer; вручную: systemctl start oilgascity-backup
 # Восстановление: см. README, раздел «Бэкапы».
 set -euo pipefail
-umask 077  # копия базы содержит хеши паролей: файлы только для владельца
 
 APP=${APP:-/opt/oilgascity-wagtail}
 ENV_FILE=${ENV_FILE:-/etc/oilgascity-wagtail.env}
@@ -28,13 +27,20 @@ rotate() {
         done
 }
 
-umask 077
+umask 077  # копия базы содержит хеши паролей: файлы только для владельца
 mkdir -p "$LOCAL_DIR"
+
+# База там же, где её открывает сайт: DJANGO_DB_PATH из файла окружения, иначе прежнее место в backend/
+DB_PATH=""
+if [ -r "$ENV_FILE" ]; then
+    DB_PATH=$(sed -n 's/^DJANGO_DB_PATH=//p' "$ENV_FILE" | tail -1 | tr -d '"'"'"' ')
+fi
+DB_PATH=${DB_PATH:-$APP/backend/db.sqlite3}
 WORK=$(mktemp -d "$LOCAL_DIR/.work-XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 
 log "Копия базы"
-"$APP/venv/bin/python" - "$APP/backend/db.sqlite3" "$WORK/db.sqlite3" <<'PY'
+"$APP/venv/bin/python" - "$DB_PATH" "$WORK/db.sqlite3" <<'PY'
 import sqlite3
 import sys
 

@@ -109,7 +109,8 @@ WSGI_APPLICATION = "backend.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        # на сервере база лежит вне кода (/var/lib/oilgascity), куда пишет только пользователь сервиса
+        "NAME": os.environ.get("DJANGO_DB_PATH") or BASE_DIR / "db.sqlite3",
     }
 }
 
