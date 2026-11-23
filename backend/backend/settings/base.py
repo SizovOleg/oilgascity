@@ -203,3 +203,8 @@ WAGTAILDOCS_SERVE_METHOD = "serve_view"
 
 # API только на чтение и без cookies (CORS_ALLOW_CREDENTIALS выключен), поэтому открыт для любых сайтов
 CORS_ALLOW_ALL_ORIGINS = True
+# заголовки CORS только у API: страница входа в админку и документы их не получают
+CORS_URLS_REGEX = r"^/wt-api/.*$"
+
+# Сброс пароля по почте выключен: почта на сервере не настроена (письмо ушло бы в журнал сервиса)
+WAGTAIL_PASSWORD_RESET_ENABLED = False

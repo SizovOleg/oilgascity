@@ -5,6 +5,7 @@
 # Запуск: таймер oilgascity-backup.timer; вручную: systemctl start oilgascity-backup
 # Восстановление: см. README, раздел «Бэкапы».
 set -euo pipefail
+umask 077  # копия базы содержит хеши паролей: файлы только для владельца
 
 APP=${APP:-/opt/oilgascity-wagtail}
 ENV_FILE=${ENV_FILE:-/etc/oilgascity-wagtail.env}

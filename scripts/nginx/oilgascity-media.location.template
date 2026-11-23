@@ -33,6 +33,7 @@ location /oilgascity-media/ {
     proxy_hide_header x-bz-file-name;
     proxy_hide_header x-bz-upload-timestamp;
     proxy_hide_header Set-Cookie;
+    proxy_hide_header Strict-Transport-Security;
     proxy_ignore_headers Set-Cookie Expires Cache-Control;
 
     # Wagtail не перезаписывает файлы (новое имя на каждую загрузку), долгий кэш безопасен
@@ -44,6 +45,7 @@ location /oilgascity-media/ {
     proxy_cache_background_update on;
     proxy_cache_lock on;
     add_header X-Cache-Status $upstream_cache_status always;
+    include snippets/oilgascity-security-headers.conf;
 
     expires 7d;
 }

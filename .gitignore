@@ -36,3 +36,12 @@ S3.txt
 
 # слои геопортала: публикуются на сервер отдельно, в git не хранятся
 frontend/public/geodata/
+
+# Локальные настройки и черновики агентов и редактора, в репозиторий не идут
+.agents/
+.claude/launch.json
+.claude/settings.local.json
+.claude/worktrees/
+.playwright-mcp/
+design-concepts/
+frontend-v2/
