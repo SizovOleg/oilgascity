@@ -110,6 +110,7 @@ export function Footer() {
 const scrolledFar = () => window.scrollY > window.innerHeight * 1.5;
 
 function ToTop() {
+  const t = useT();
   const [show, setShow] = useState(scrolledFar);
   useEffect(() => {
     const onScroll = () => setShow(scrolledFar());
@@ -117,7 +118,7 @@ function ToTop() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
   return (
-    <button type="button" className={`to-top${show ? ' on' : ''}`} aria-label="Наверх" title="Наверх"
+    <button type="button" className={`to-top${show ? ' on' : ''}`} aria-label={t('Наверх')} title={t('Наверх')}
       tabIndex={show ? 0 : -1} aria-hidden={!show} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
       <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M8 13V3M3.5 7.5 8 3l4.5 4.5" />

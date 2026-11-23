@@ -5,23 +5,26 @@
 // фокус возвращается к ссылке, с которой открыли.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LIGHTBOX_EVENT as EVENT, openLightbox } from '../lib/lightbox';
+import { useT } from '../lib/i18n';
 
 // Ссылка на полный размер: обычный щелчок открывает окно на сайте; средняя кнопка и щелчок с Ctrl
 // по-прежнему открывают файл в новой вкладке
 export function ZoomLink({ items, index = 0, className = 'zoom-link', children }) {
+  const t = useT();
   const onClick = (e) => {
     if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
     openLightbox(items, index);
   };
   return (
-    <a href={items[index].src} className={className} title="Открыть в полном размере" onClick={onClick}>
+    <a href={items[index].src} className={className} title={t('Открыть в полном размере')} onClick={onClick}>
       {children}
     </a>
   );
 }
 
 export function LightboxHost() {
+  const t = useT();
   const [state, setState] = useState(null);
   const back = useRef(null);
   const closeRef = useRef(null);
@@ -63,24 +66,24 @@ export function LightboxHost() {
   if (!state) return null;
   const it = state.items[state.index];
   return (
-    <div className="zoom" role="dialog" aria-modal="true" aria-label={it.caption || 'Просмотр'} onClick={close}>
+    <div className="zoom" role="dialog" aria-modal="true" aria-label={it.caption || t('Просмотр')} onClick={close}>
       <figure onClick={(e) => e.stopPropagation()}>
         <img key={it.src} src={it.src} alt={it.caption || ''} width={it.width} height={it.height}
           style={it.preview ? { backgroundImage: `url("${it.preview}")` } : undefined} />
         {it.caption || many ? (
           <figcaption>
             {it.caption}
-            {many ? <span>{state.index + 1} из {state.items.length}</span> : null}
+            {many ? <span>{state.index + 1} {t('из')} {state.items.length}</span> : null}
           </figcaption>
         ) : null}
       </figure>
       {many ? (
         <>
-          <button type="button" className="zoom-nav prev" aria-label="Предыдущий снимок" onClick={(e) => { e.stopPropagation(); go(-1); }}>‹</button>
-          <button type="button" className="zoom-nav next" aria-label="Следующий снимок" onClick={(e) => { e.stopPropagation(); go(1); }}>›</button>
+          <button type="button" className="zoom-nav prev" aria-label={t('Предыдущий снимок')} onClick={(e) => { e.stopPropagation(); go(-1); }}>‹</button>
+          <button type="button" className="zoom-nav next" aria-label={t('Следующий снимок')} onClick={(e) => { e.stopPropagation(); go(1); }}>›</button>
         </>
       ) : null}
-      <button type="button" className="zoom-close" ref={closeRef} aria-label="Закрыть" onClick={close}>×</button>
+      <button type="button" className="zoom-close" ref={closeRef} aria-label={t('Закрыть')} onClick={close}>×</button>
     </div>
   );
 }
