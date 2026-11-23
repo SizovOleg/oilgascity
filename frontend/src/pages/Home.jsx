@@ -75,7 +75,7 @@ function About({ home }) {
         </div>
         {tasks.length ? (
           <div className="tasks">
-            <h3 className="sub">Задачи: что даст проект</h3>
+            <h3 className="sub">Задачи проекта</h3>
             <ol className="task-list">
               {tasks.map((t, i) => (
                 <li key={i} className="step">
@@ -210,13 +210,13 @@ function Shelves({ materials, pubs, expeditions, team }) {
           <Link className="shelf photo" to="/materials#photos">
             {libImg ? <img src={libImg.large} alt="" loading="lazy" /> : null}
             <b>{photoTotal.toLocaleString('ru-RU')}</b><strong>Фототека</strong>
-            <span>Полевые снимки двух экспедиций с подписями: парки и скверы, площадки, геоботаника, пески, свалки</span>
+            <span>Полевые снимки экспедиций 2025 и 2026 годов с подписями: парки и скверы, площадки, геоботаника, пески, свалки</span>
           </Link>
           {shelf('maps', maps, 'Карты и схемы', 'Рисунки из статьи о Муравленко и слои геопортала')}
           {shelf('publications', pubCount, 'Публикации', 'Статьи по результатам проекта')}
           {shelf('talks', talks, 'Доклады', 'Выступления на конференциях')}
           {shelf('archives', archives, 'Архивы и источники', 'Генеральные планы, проектная документация, документы о благоустройстве')}
-          {shelf('expeditions', expeditions.length, 'Экспедиции', 'Муравленко, 2025. Когалым, 2026')}
+          {shelf('expeditions', expeditions.length, 'Экспедиции', 'Муравленко, лето 2025. Когалым, зима и лето 2026')}
           {shelf('glossary', terms, 'Глоссарий', 'Термины проекта')}
           {shelf('team', team?.members?.length || 0, 'Авторский коллектив', 'Институт криосферы Земли ТюмНЦ СО РАН')}
         </div>
