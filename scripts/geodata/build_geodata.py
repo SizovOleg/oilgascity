@@ -17,10 +17,14 @@ import sys
 import warnings
 from pathlib import Path
 
+import shutil
+
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import pyogrio
 import rasterio
+import shapely
 from PIL import Image
 from rasterio.warp import Resampling, calculate_default_transform, reproject, transform_bounds
 from shapely.geometry import mapping
@@ -101,10 +105,17 @@ def read(src: Path, rel: str) -> gpd.GeoDataFrame:
     return gdf.to_crs(UTM)
 
 
-def to_geojson(gdf: gpd.GeoDataFrame, path: Path, props: list[str], tolerance: float = 0.5) -> dict:
-    """Упрощение в метрах (UTM), перевод в WGS 84, округление координат до 6 знаков."""
+def to_geojson(gdf: gpd.GeoDataFrame, path: Path, props: list[str], tolerance: float = 0.5,
+               coverage: bool = False) -> dict:
+    """Упрощение в метрах (UTM), перевод в WGS 84, округление координат до 6 знаков.
+    coverage: слой сплошной (контуры примыкают друг к другу, как карта растительности или зоны); тогда общие
+    границы упрощаются согласованно (shapely.coverage_simplify) и между соседями не появляются щели."""
     gdf = gdf[~gdf.geometry.is_empty & gdf.geometry.notna()].copy()
-    if tolerance:
+    if tolerance and coverage:
+        polys = [polygonal(g) for g in gdf.geometry.make_valid().values]
+        gdf["geometry"] = shapely.coverage_simplify(polys, tolerance)
+        gdf = gdf[~gdf.geometry.is_empty]
+    elif tolerance:
         gdf["geometry"] = gdf.geometry.simplify(tolerance, preserve_topology=True)
     gdf = gdf.to_crs("EPSG:4326")
     features = []
@@ -120,6 +131,45 @@ def to_geojson(gdf: gpd.GeoDataFrame, path: Path, props: list[str], tolerance: f
     path.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"  {path.name}: {len(features)} объектов, {path.stat().st_size / 1e6:.2f} МБ")
     return data
+
+
+def polygonal(g):
+    """Только полигональная часть геометрии: после make_valid бывают линии и точки, coverage_simplify их не берёт."""
+    if g.geom_type in ("Polygon", "MultiPolygon"):
+        return g
+    parts = [q for x in shapely.get_parts(g) for q in shapely.get_parts(x) if q.geom_type == "Polygon"]
+    return shapely.MultiPolygon(parts) if parts else shapely.Polygon()
+
+
+def write_vector_tiles(gdf: gpd.GeoDataFrame, d: Path, name: str, props: list[str], minzoom: int = 11,
+                       maxzoom: int = 16) -> dict:
+    """Векторные тайлы MVT (каталог <name>_tiles/{z}/{x}/{y}.pbf) для тяжёлого сплошного слоя.
+    Контуры исходные, по одному объекту; соседи квантуются на одну сетку тайла, поэтому щелей нет, а браузер
+    грузит только тайлы на экране (MapLibre дорисовывает крупнее maxzoom из тайлов maxzoom). Пишет GDAL (pyogrio)."""
+    out = d / f"{name}_tiles"
+    if out.exists():
+        shutil.rmtree(out)
+    d.mkdir(parents=True, exist_ok=True)
+    # encoding явно: на Windows pyogrio иначе пишет строки в кодировке системы, и названия классов портятся
+    pyogrio.write_dataframe(gdf[props + ["geometry"]].to_crs("EPSG:3857"), out, layer=name, driver="MVT", encoding="UTF-8",
+                            # упрощение в 4 единицы тайла (меньше пикселя на экране) до предпоследнего масштаба:
+                            # объём тайлов вдвое меньше, а maxzoom остаётся точным для крупных масштабов
+                            dataset_options={"FORMAT": "DIRECTORY", "COMPRESS": "NO", "TILE_EXTENSION": "pbf",
+                                             "MINZOOM": str(minzoom), "MAXZOOM": str(maxzoom), "NAME": name,
+                                             "SIMPLIFICATION": "4", "SIMPLIFICATION_MAX_ZOOM": str(maxzoom - 1)})
+    tiles = list(out.rglob("*.pbf"))
+    print(f"  {out.name}: {len(gdf)} объектов, {len(tiles)} тайлов z{minzoom}-{maxzoom}, "
+          f"{sum(t.stat().st_size for t in tiles) / 1e6:.1f} МБ")
+    return {"tiles": f"{out.name}/{{z}}/{{x}}/{{y}}.pbf", "layer": name, "minzoom": minzoom, "maxzoom": maxzoom}
+
+
+def surface_tiles(surface: gpd.GeoDataFrame, obj: gpd.GeoDataFrame, field: str, d: Path, props: list[str]) -> list[dict]:
+    """Типы поверхности в двух наборах тайлов. До 14-го масштаба: классы, слитые и обобщённые (фрагменты меньше 50 м²
+    отброшены, щели меньше пикселя), иначе десятки тысяч контуров не помещаются в предел тайла GDAL и выпадают.
+    С 14-го: исходные объекты с номером oid (щелчок и таблица). show: масштабы, на которых набор виден."""
+    lo = with_names(dissolve(surface, field, 50, 3.0).rename(columns={field: "cls"}))
+    return [{**write_vector_tiles(obj, d, "surface", props, minzoom=14, maxzoom=16), "show": [14, 24]},
+            {**write_vector_tiles(lo, d, "surface_lo", ["cls", "name"], minzoom=11, maxzoom=13), "show": [0, 14]}]
 
 
 def clean(value, digits: int = 2):
@@ -293,7 +343,7 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
     to_geojson(border.assign(name="Граница города"), d / "border.json", ["name"], 0.5)
     micro = read(src, "Муравленко/Вектор/Microdistricts.shp").rename(columns={"Names": "name"})
     micro["area_ha"] = (micro.geometry.area / 1e4).round(2)
-    to_geojson(micro, d / "microdistricts.json", ["name", "area_ha"], 0.5)
+    to_geojson(micro, d / "microdistricts.json", ["name", "area_ha"], 0.5, coverage=True)
     roads = read(src, "Муравленко/Вектор/Roads.shp").rename(columns={"NAME": "name"})
     to_geojson(roads, d / "roads.json", ["name"], 0.5)
     open_sp = read(src, "Муравленко/Вектор/M_OpenSpace.shp")
@@ -320,11 +370,10 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
                d / "buildings.json", ["address", "floors", "entrances", "apartments", "living_area", "year", "condition", "type"], 0.3)
     zones = read(src, "Муравленко/Вектор/Functional_zones.shp").rename(columns={"Zones": "zone"})
     zones["area_ha"] = (zones.geometry.area / 1e4).round(2)
-    to_geojson(zones, d / "zones.json", ["zone", "area_ha"], 0.5)
+    to_geojson(zones, d / "zones.json", ["zone", "area_ha"], 0.5, coverage=True)
     points = read(src, "Муравленко/Вектор/M_Points.shp").rename(columns={"Name": "name"})
     to_geojson(points, d / "places.json", ["name"], 0)
     surface = read(src, "Муравленко/Классификация/Classification_map_v3.shp")
-    to_geojson(with_names(dissolve(surface, "Class", 30, 2.0).rename(columns={"Class": "cls"})), d / "surface.json", ["cls", "name", "area_ha"], 0)
     dl_mur_surface = export_layer(
         surface.assign(cls=surface["Class"], cls_name=surface["Class"].map(lambda c: SURFACE[c][0] if c in SURFACE else None),
                        space=surface["fclass"].map(OPEN_KINDS)), out,
@@ -333,14 +382,18 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
         fields=[("cls", "код класса (латиницей, как в исходной классификации)"), ("cls_name", "класс поверхности"),
                 ("space", "тип открытого пространства, в которое попадает контур (если попадает)")],
         license_key="cc-by", cite=f"{PUB_MUR}. {GRANT}. {SITE_REF}")
-    tbl_mur_surface = write_objects(
-        surface.assign(cls_name=surface["Class"].map(lambda c: SURFACE[c][0] if c in SURFACE else None),
-                       space=surface["fclass"].map(OPEN_KINDS), area_m2=surface.geometry.area.round(1)),
-        d, "surface", [["cls_name", "Класс"], ["space", "Открытое пространство"], ["area_m2", "Площадь, м²"]])
+    # типы поверхности на карте векторными тайлами из исходных контуров (слитый по классам GeoJSON давал щели между
+    # классами и весил 7 МБ); номер oid у тайлов совпадает со строкой атрибутивной таблицы
+    obj = surface[surface.geometry.notna() & ~surface.geometry.is_empty].reset_index(drop=True)
+    obj = obj.assign(oid=np.arange(len(obj)), cls=obj["Class"], name=obj["Class"].map(lambda c: SURFACE[c][0] if c in SURFACE else None),
+                     space=obj["fclass"].map(OPEN_KINDS), area_m2=obj.geometry.area.round(1))
+    vt_mur_surface = surface_tiles(surface, obj, "Class", d, ["oid", "cls", "name", "space"])  # площадь в таблице
+    tbl_mur_surface = write_objects(obj.assign(cls_name=obj["name"]), d, "surface",
+                                    [["cls_name", "Класс"], ["space", "Открытое пространство"], ["area_m2", "Площадь, м²"]])
     # растительность на карте по контурам (около 0,7 МБ в gzip): щелчок и таблица показывают отдельный контур
     veg = read(src, "Муравленко/Карта растительности/Vegetation_map.shp").rename(columns={"Veg_3": "formation", "Veg_2": "community"})
     veg["area_m2"] = veg.geometry.area.round(0)
-    to_geojson(veg, d / "vegetation.json", ["formation", "community", "area_m2"], 1.0)
+    to_geojson(veg, d / "vegetation.json", ["formation", "community", "area_m2"], 2.0, coverage=True)
     green = open_sp[open_sp["group"] == "green"]
     to_geojson(buffer_union(green, 400), d / "access_green.json", ["label"], 1.0)
     dl_mur = {
@@ -373,8 +426,8 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
             ]},
             {"title": "Типы поверхности", "note": "По рис. 4a статьи: снимок WorldView-2, 17.07.2020", "layers": [
                 layer("surface", "Классификация типов поверхности", "fill", match_expr("cls", SURFACE),
-                      legend=legend_from(mur_classes, SURFACE), popup=["name"], default=True,
-                      table=tbl_mur_surface, download=dl_mur_surface),
+                      legend=legend_from(mur_classes, SURFACE), popup=["name", "space"], default=True,
+                      vector=vt_mur_surface, table=tbl_mur_surface, download=dl_mur_surface),
             ]},
             {"title": "Растительность", "note": "Геоботаническая карта, отчёт 2025, результат 3", "layers": [
                 layer("vegetation", "Растительные сообщества", "fill", match_expr("formation", VEGETATION),
@@ -446,7 +499,6 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
                d / "buildings.json", ["address", "micro", "floors", "entrances", "apartments", "living_area", "year", "people",
                                       "condition", "type"], 0.3)
     surface = read(src, "Когалым/Классификация/Kogalym_map_v3_clip.shp")
-    to_geojson(with_names(dissolve(surface, "Predicted_", 30, 2.0).rename(columns={"Predicted_": "cls"})), d / "surface.json", ["cls", "name", "area_ha"], 0)
     # класс «здания» составлен из контуров зданий OpenStreetMap (поле osm_id): слой распространяется по ODbL
     dl_kog["surface"] = export_layer(
         surface.assign(cls=surface["Predicted_"], cls_name=surface["Predicted_"].map(lambda c: SURFACE[c][0] if c in SURFACE else None),
@@ -457,11 +509,14 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
                 ("osm_id", "номер здания OpenStreetMap (у класса «здания»)")],
         license_key="odbl", attribution="© участники OpenStreetMap",
         cite=f"{GRANT}, типы поверхности Когалыма; © участники OpenStreetMap. {SITE_REF}")
-    tbl_kog_surface = write_objects(
-        surface.assign(cls_name=surface["Predicted_"].map(lambda c: SURFACE[c][0] if c in SURFACE else None),
-                       osm_id=surface["osm_id"].map(lambda v: str(v).strip() if pd.notna(v) and str(v).strip() else None),
-                       area_m2=surface.geometry.area.round(1)),
-        d, "surface", [["cls_name", "Класс"], ["osm_id", "OSM ID здания"], ["area_m2", "Площадь, м²"]])
+    obj = surface[surface.geometry.notna() & ~surface.geometry.is_empty].reset_index(drop=True)
+    obj = obj.assign(oid=np.arange(len(obj)), cls=obj["Predicted_"],
+                     name=obj["Predicted_"].map(lambda c: SURFACE[c][0] if c in SURFACE else None),
+                     osm_id=obj["osm_id"].map(lambda v: str(v).strip() if pd.notna(v) and str(v).strip() else None),
+                     area_m2=obj.geometry.area.round(1))
+    vt_kog_surface = surface_tiles(surface, obj, "Predicted_", d, ["oid", "cls", "name"])  # площадь и OSM ID в таблице
+    tbl_kog_surface = write_objects(obj.assign(cls_name=obj["name"]), d, "surface",
+                                    [["cls_name", "Класс"], ["osm_id", "OSM ID здания"], ["area_m2", "Площадь, м²"]])
     to_geojson(buffer_union(green, 400), d / "access_green.json", ["label"], 1.0)
     # поле Name в этих шейпах обрезано до 4 символов («КЭ_1» вместо «КЭ_12»), имя собирается из id
     vp = read(src, "Когалым/Точки описаний/Vegetation_points.shp").assign(kind="геоботаническое описание")
@@ -487,7 +542,7 @@ def build(src: Path, out: Path, housing_root: Path | None = None, photos_index: 
             {"title": "Типы поверхности и NDVI", "note": "Снимок GeoEye-1, 08.07.2020; публикуются только производные", "layers": [
                 layer("surface", "Классификация типов поверхности", "fill", match_expr("cls", SURFACE),
                       legend=legend_from(kog_classes, SURFACE), popup=["name"], default=True,
-                      table=tbl_kog_surface, download=dl_kog["surface"]),
+                      vector=vt_kog_surface, table=tbl_kog_surface, download=dl_kog["surface"]),
                 {"id": "ndvi", "title": "Вегетационный индекс NDVI", "type": "image", "file": "ndvi.png",
                  "coordinates": ndvi_corners, "opacity": 0.85, "default": False,
                  "legend": [{"label": "0 и ниже: без растительности", "color": "#9E704A"}, {"label": "0,4", "color": "#BDD673"},
@@ -578,7 +633,7 @@ def bounds_of(gdf: gpd.GeoDataFrame) -> list[list[float]]:
 
 def layer(lid: str, title: str, kind: str, color, *, default: bool = False, legend: list | None = None,
           popup: list | None = None, label: str | None = None, width: float = 1.5, opacity: float = 0.7,
-          note: str = "", download: dict | None = None, table: dict | None = None) -> dict:
+          note: str = "", download: dict | None = None, table: dict | None = None, vector: list | None = None) -> dict:
     out = {"id": lid, "title": title, "type": kind, "file": f"{lid}.json", "color": color, "default": default,
            "width": width, "opacity": opacity}
     if legend:
@@ -593,6 +648,8 @@ def layer(lid: str, title: str, kind: str, color, *, default: bool = False, lege
         out["download"] = download
     if table:
         out["table"] = table  # колонки атрибутивной таблицы в геопортале
+    if vector:
+        out["vector"] = vector  # слой из векторных тайлов вместо GeoJSON: наборы с диапазонами масштабов
     return out
 
 

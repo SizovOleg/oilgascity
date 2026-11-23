@@ -225,6 +225,25 @@ function styleLayers(city, layer) {
   ];
 }
 
+// Наборы векторных тайлов слоя (у типов поверхности два: обобщённый для мелких масштабов и по объектам для крупных)
+const vectorParts = (layer) => (!layer.vector ? [] : Array.isArray(layer.vector) ? layer.vector : [layer.vector]);
+const partId = (id, k) => (k ? `${id}~${k}` : id); // первый набор под основными именами: по ним щелчок находит объект
+
+// Стилевые слои с учётом векторных тайлов: у каждого набора свой источник, слой внутри тайла и масштабы показа
+function mapLayers(city, layer) {
+  const parts = vectorParts(layer);
+  if (!parts.length) return styleLayers(city, layer);
+  return parts.flatMap((v, k) => styleLayers(city, layer).map((l) => ({
+    ...l, id: partId(l.id, k), source: partId(l.source, k), 'source-layer': v.layer,
+    ...(v.show ? { minzoom: v.show[0], maxzoom: v.show[1] } : {}),
+  })));
+}
+
+// Имена стилевых слоёв, по которым ищется объект под курсором (заливка у площадных слоёв)
+function hitLayerIds(city, layer) {
+  return mapLayers(city, layer).filter((l) => l.type !== 'symbol' && (layer.type !== 'fill' && layer.type !== 'fill-outline' ? true : l.type === 'fill')).map((l) => l.id);
+}
+
 function labelLayer(id, src, field) {
   return {
     id: `${id}-label`, type: 'symbol', source: src,
@@ -239,16 +258,22 @@ function addLayer(map, city, layer, ver = '') {
   if (!map.getSource(id)) {
     if (layer.type === 'image') {
       map.addSource(id, { type: 'image', url: `${DATA}/${city}/${layer.file}${ver}`, coordinates: layer.coordinates });
+    } else if (layer.vector) {
+      // тяжёлый сплошной слой (типы поверхности): векторные тайлы, грузятся только видимые; адрес абсолютный строкой,
+      // как у растровых тайлов (new URL кодирует {z})
+      vectorParts(layer).forEach((v, k) => {
+        map.addSource(partId(id, k), { type: 'vector', tiles: [`${window.location.origin}${DATA}/${city}/${v.tiles}${ver}`], minzoom: v.minzoom, maxzoom: v.maxzoom });
+      });
     } else {
       // generateId: номер объекта в файле, по нему щелчок на карте находит строку атрибутивной таблицы
       map.addSource(id, { type: 'geojson', data: `${DATA}/${city}/${layer.file}${ver}`, generateId: true });
     }
   }
-  for (const l of styleLayers(city, layer)) if (!map.getLayer(l.id)) map.addLayer(l);
+  for (const l of mapLayers(city, layer)) if (!map.getLayer(l.id)) map.addLayer(l);
 }
 
 function setVisible(map, city, layer, visible, filter) {
-  for (const l of styleLayers(city, layer)) {
+  for (const l of mapLayers(city, layer)) {
     if (!map.getLayer(l.id)) continue;
     map.setLayoutProperty(l.id, 'visibility', visible ? 'visible' : 'none');
     // фильтр по значению поля (например, десятилетию постройки) у слоёв, которые его поддерживают
@@ -599,12 +624,16 @@ function AttrPanel({ city, layer, ver, filter, mapRef, height, minimized, onHeig
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !rows) return undefined;
-    const base = layerKey(city, layer.id);
     const onClick = async (e) => {
       let r = null;
-      if (!objects) {
-        const ids = [`${base}-fill`, base].filter((id) => map.getLayer(id));
-        const hit = map.queryRenderedFeatures(e.point, { layers: ids }).find((h) => h.id !== undefined);
+      const ids = hitLayerIds(city, layer).filter((id) => map.getLayer(id));
+      const hits = ids.length ? map.queryRenderedFeatures(e.point, { layers: ids }) : [];
+      // слой векторных тайлов несёт номер строки в свойстве oid, GeoJSON-слой: в номере объекта (generateId)
+      const tagged = hits.find((h) => h.properties?.oid !== undefined);
+      if (tagged) {
+        r = rows[Number(tagged.properties.oid)];
+      } else if (!objects) {
+        const hit = hits.find((h) => h.id !== undefined);
         if (hit) r = rows[hit.id];
       } else {
         const { lng, lat } = e.lngLat;
@@ -878,10 +907,7 @@ export default function Geoportal() {
     const map = mapRef.current;
     if (!map || !city || !tab) return undefined;
     const layers = layersOf(tab).filter((l) => l.popup);
-    const ids = layers.flatMap((l) => {
-      const base = layerKey(city.slug, l.id);
-      return l.type === 'fill' ? [`${base}-fill`] : [base];
-    });
+    const ids = layers.flatMap((l) => hitLayerIds(city.slug, l));
     const present = () => ids.filter((id) => map.getLayer(id) && map.getLayoutProperty(id, 'visibility') !== 'none');
     const onClick = (e) => {
       const all = map.queryRenderedFeatures(e.point, { layers: present() });
@@ -899,7 +925,7 @@ export default function Geoportal() {
       const i = cycleRef.current.key === key ? (cycleRef.current.i + 1) % hits.length : 0;
       cycleRef.current = { key, i };
       const hit = hits[i];
-      const layer = layers.find((l) => hit.layer.id === layerKey(city.slug, l.id) || hit.layer.id === `${layerKey(city.slug, l.id)}-fill`);
+      const layer = layers.find((l) => hitLayerIds(city.slug, l).includes(hit.layer.id));
       const more = hits.length > 1
         ? `<div class="gp-pop-more">${i + 1} из ${hits.length} в этом месте: щёлкните ещё раз, чтобы показать следующий</div>` : '';
       new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(e.lngLat).setHTML(popupHtml(layer, hit.properties) + more).addTo(map);
