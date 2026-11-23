@@ -40,6 +40,13 @@ export const EN = {
   'Фото:': 'Photo:',
   'Содержание': 'Contents',
   'Открыть в полном размере': 'Open full size',
+  // окно просмотра фото (components/Lightbox.jsx в main) и кнопка «наверх»; счётчик «3 из 11»
+  'Просмотр': 'Viewer',
+  'Предыдущий снимок': 'Previous photo',
+  'Следующий снимок': 'Next photo',
+  'Закрыть': 'Close',
+  'из': 'of',
+  'Наверх': 'Back to top',
   'Скопировано': 'Copied',
   'Не удалось скопировать, выделите текст вручную': 'Could not copy, please select the text manually',
   'Скопировать ссылку': 'Copy citation',
