@@ -213,3 +213,4 @@
 .shots-more button:hover, .shots-more button:focus-visible { background: var(--ink); color: var(--snow); outline: none; }
 /* пометка на /en у страницы без перевода: текст показан на русском (UntranslatedNote в Common.jsx) */
 .untranslated { display: inline-block; margin: 0 0 0.7rem; padding: 0.3rem 0.8rem; font-size: 0.82rem; font-weight: 700; line-height: 1.3; border: 2px dashed var(--tape); border-radius: 999px; background: var(--snow); color: var(--ink); }
+.pub-links a + a { margin-left: 0.9rem; }

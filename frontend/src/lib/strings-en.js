@@ -133,6 +133,7 @@ export const EN = {
   'Форма': 'Format',
   'Те же доклады в виде библиографических записей': 'The same talks as bibliographic records',
   'Текст статьи': 'Full text',
+  'PDF статьи': 'PDF',
   'Смежные публикации участников': 'Related publications by the team',
   'опубликовано': 'published',
   'в печати': 'in press',

@@ -11,12 +11,19 @@ import { Email } from '../lib/email';
 function PubEntry({ p }) {
   const status = STATUS_LABELS[p.status];
   const text = p.citation || `${p.authors} ${p.title}${p.journal ? ` // ${p.journal}` : ''}. ${p.year}.`;
-  const link = p.pdf_url || p.doi || p.pdf_file?.url;
+  // PDF статьи на сайте (журнал разрешает распространение), страница по DOI, иначе внешняя ссылка на текст
+  const links = [
+    p.pdf_file?.url ? [p.pdf_file.url, T('PDF статьи')] : null,
+    p.doi ? [p.doi, 'DOI'] : null,
+    !p.pdf_file && p.pdf_url ? [p.pdf_url, T('Текст статьи')] : null,
+  ].filter(Boolean);
   return (
     <li>
       {text}
       {status ? <span className={`chip ${status.cls}`}>{T(status.text)}</span> : null}
-      {link ? <span className="src"><a href={link}>{T('Текст статьи')}</a></span> : null}
+      {links.length ? (
+        <span className="src pub-links">{links.map(([href, label]) => <a key={href} href={href}>{label}</a>)}</span>
+      ) : null}
     </li>
   );
 }
