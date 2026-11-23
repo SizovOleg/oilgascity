@@ -14,7 +14,7 @@ function ReportBody({ page, crumbs, tabs }) {
     <main>
       <div className="wrap">
         <PageHead crumbs={crumbs} title={page.title} deck={page.intro} image={page.header_image}
-          caption={page.header_caption} meta={page.header_meta} />
+          caption={page.header_caption} meta={page.header_meta} untranslated={page._untranslated} />
         {tabs}
         <div className="doc">
           <Toc items={buildToc(blocks)} />

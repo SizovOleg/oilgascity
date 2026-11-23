@@ -157,12 +157,20 @@ export function Loading({ error }) {
   );
 }
 
-export function PageHead({ crumbs, title, deck, image, caption, meta, children }) {
+// Пометка на /en у страницы, перевода которой ещё нет: текст показан на русском (lib/api.js, _untranslated)
+export function UntranslatedNote({ show }) {
+  const t = useT();
+  if (!show) return null;
+  return <p className="untranslated">{t('Перевод готовится: страница пока показана на русском.')}</p>;
+}
+
+export function PageHead({ crumbs, title, deck, image, caption, meta, untranslated, children }) {
   return (
     <div className={`page-head${image ? ' with-photo' : ''}`}>
       <div>
         {crumbs ? <p className="crumbs">{crumbs}</p> : null}
-        <h1>{title}</h1>
+        <UntranslatedNote show={untranslated} />
+        <h1 lang={untranslated ? 'ru' : undefined}>{title}</h1>
         {deck ? <p className="deck">{deck}</p> : null}
         {children}
       </div>

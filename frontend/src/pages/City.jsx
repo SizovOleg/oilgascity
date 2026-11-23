@@ -4,7 +4,7 @@ import { api, useData } from '../lib/api';
 import { useHashScroll, useTitle } from '../lib/hooks';
 import { splitFigure } from '../lib/format';
 import { Counter, buildToc, numberBlocks, splitSections } from '../lib/numbering';
-import { Figure, GeoBand, Html, Loading, PhotoMeta, Toc } from '../components/Common';
+import { Figure, GeoBand, Html, Loading, PhotoMeta, Toc, UntranslatedNote } from '../components/Common';
 import { ZoomLink } from '../components/Lightbox';
 import { galleryItems } from '../lib/lightbox';
 import { BlockList, Section } from '../blocks/Blocks';
@@ -104,7 +104,8 @@ export default function City() {
         <div className="wrap cover-wrap">
           <div className="cover-plate">
             <p className="crumbs"><Link to="/">{T('Главная')}</Link> / {T('Модельные города')}</p>
-            <h1>{city.title}</h1>
+            <UntranslatedNote show={city._untranslated} />
+            <h1 lang={city._untranslated ? 'ru' : undefined}>{city.title}</h1>
             {city.lead ? <p className="deck">{city.lead}</p> : null}
           </div>
           {city.header_caption ? <p className="slate cover-slate">{city.header_caption}<PhotoMeta text={city.header_meta} /></p> : null}

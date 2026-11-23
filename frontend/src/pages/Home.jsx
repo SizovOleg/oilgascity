@@ -3,7 +3,7 @@ import { LLink as Link, T, currentLang } from '../lib/i18n';
 import { api, useData } from '../lib/api';
 import { useHashScroll, useTitle } from '../lib/hooks';
 import { photoGroups, splitFigure } from '../lib/format';
-import { GeoBand, Html, Loading, PhotoMeta, Stats } from '../components/Common';
+import { GeoBand, Html, Loading, PhotoMeta, Stats, UntranslatedNote } from '../components/Common';
 import { NewsLog } from '../blocks/Embeds';
 
 // строка паспорта по названию: на английской странице название переведено (EN в lib/strings-en.js)
@@ -25,7 +25,8 @@ function Cover({ home }) {
       ) : null}
       <div className="wrap cover-wrap">
         <div className="cover-plate">
-          <h1>{home.hero_title || home.title}</h1>
+          <UntranslatedNote show={home._untranslated} />
+          <h1 lang={home._untranslated ? 'ru' : undefined}>{home.hero_title || home.title}</h1>
           {home.lead ? <p className="deck"><NoBreakGrant text={home.lead} /></p> : null}
         </div>
         {home.header_caption ? (

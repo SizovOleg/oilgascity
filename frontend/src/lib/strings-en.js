@@ -31,6 +31,7 @@ export const EN = {
   'Страница не найдена': 'Page not found',
   'Возможно, адрес изменился после обновления сайта. Начните с': 'The address may have changed after a site update. Start from the',
   'главной страницы': 'home page',
+  'Перевод готовится: страница пока показана на русском.': 'Translation in progress: this page is shown in Russian for now.',
 
   // общие подписи
   'Рис.': 'Fig.',

@@ -59,7 +59,8 @@ export function NewsPost() {
   return (
     <main>
       <div className="wrap">
-        <PageHead crumbs={<><Link to="/">{T('Главная')}</Link> / <Link to="/news">{T('Новости')}</Link></>} title={data.title}>
+        <PageHead crumbs={<><Link to="/">{T('Главная')}</Link> / <Link to="/news">{T('Новости')}</Link></>} title={data.title}
+          untranslated={data._untranslated}>
           <p className="day post-date">{formatDate(data.date)}</p>
         </PageHead>
         <article className="post">
@@ -83,7 +84,7 @@ export function Expedition() {
       <div className="wrap">
         <PageHead crumbs={<><Link to="/">{T('Главная')}</Link> / <Link to="/materials#expeditions">{T('Экспедиции')}</Link></>}
           title={data.title} deck={`${formatRange(data.date_start, data.date_end)}, ${data.location}`}
-          image={data.header_image} />
+          image={data.header_image} untranslated={data._untranslated} />
         <article className="post">
           <Html html={data.description} className="measure prose" />
         </article>

@@ -18,6 +18,7 @@ const NAV = [
 
 // Переключатель языка: та же страница на другом языке. У новостей и экспедиций в адресе id страницы,
 // а у перевода свой id, поэтому он ищется через API (translation_of); у остальных страниц адрес тот же.
+// Перевода нет: остаётся тот же id (на /en такая страница показана по-русски с пометкой, см. lib/api.js).
 export function LangSwitch({ className = 'lang-btn' }) {
   const { pathname, hash, search } = useLocation();
   const lang = useLang();
@@ -30,7 +31,7 @@ export function LangSwitch({ className = 'lang-btn' }) {
     if (!byId) return;
     e.preventDefault();
     const id = await translationId(byId[2], target).catch(() => null);
-    navigate(id ? localePath(target, `/${byId[1]}/${id}`) : localePath(target, `/${byId[1] === 'news' ? 'news' : 'materials'}`));
+    navigate(localePath(target, `/${byId[1]}/${id ?? byId[2]}`));
   };
   return (
     <Link className={className} to={href} onClick={go} hrefLang={target} lang={target}

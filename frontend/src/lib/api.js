@@ -2,13 +2,29 @@
 // разделы ссылаются друг на друга (главная берёт результаты и города), повторно не грузим.
 // Язык страниц (locale) берётся из адреса: без него API отдаёт страницы обоих языков сразу.
 import { useEffect, useState } from 'react';
-import { currentLang } from './i18n';
+import { currentLang, useLang } from './i18n';
 
 const BASE = '/wt-api/v2/pages/';
 const cache = new Map();
 
+// Английская версия, пока перевод не закончен: страницы без перевода показываются на русском с пометкой
+// _untranslated. Пара «оригинал и перевод» находится по slug (wagtail-localize держит его общим), а если на обоих
+// языках по одной странице (главная, коллектив, запрос по id), берётся английская. Порядок как у русского списка.
+function withFallback(en, ru) {
+  if (!ru.length || (ru.length === 1 && en.length === 1)) return en;
+  const bySlug = new Map(en.map((p) => [p.meta?.slug, p]));
+  return ru.map((p) => bySlug.get(p.meta?.slug) || { ...p, _untranslated: true });
+}
+
 export function getPages(params) {
-  const query = new URLSearchParams({ fields: '*', limit: '20', locale: currentLang(), ...params }).toString();
+  // явный locale (поиск перевода для переключателя) и русская версия идут одним запросом
+  if (params.locale || currentLang() !== 'en') return fetchPages({ locale: currentLang(), ...params });
+  return Promise.all([fetchPages({ ...params, locale: 'en' }), fetchPages({ ...params, locale: 'ru' })])
+    .then(([en, ru]) => withFallback(en, ru));
+}
+
+function fetchPages(params) {
+  const query = new URLSearchParams({ fields: '*', limit: '20', ...params }).toString();
   if (!cache.has(query)) {
     const request = fetch(`${BASE}?${query}`)
       .then((res) => {
@@ -46,8 +62,11 @@ export const api = {
   publications: () => getOne('home.PublicationsPage'),
 };
 
-// Загрузка нескольких запросов сразу: { data, error }, data появляется, когда готово всё
+// Загрузка нескольких запросов сразу: { data, error }, data появляется, когда готово всё.
+// Язык в зависимостях: при переключении RU/EN страница с тем же id не пересоздаётся и иначе осталась бы
+// с данными прежнего языка
 export function useData(load, deps = []) {
+  const lang = useLang();
   const [state, setState] = useState({ data: null, error: null });
   useEffect(() => {
     let alive = true;
@@ -62,6 +81,6 @@ export function useData(load, deps = []) {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [...deps, lang]);
   return state;
 }
