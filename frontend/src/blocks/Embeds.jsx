@@ -138,8 +138,9 @@ const cityOf = (place) => (/когалым|kogalym/i.test(place) ? 'kog' : 'mur'
 const yearOf = (date) => (date.match(/20\d\d/) || [''])[0];
 const COLLAPSED = 12; // снимков в свёрнутой фототеке: три ряда по четыре
 
-// Рисунки и схемы из статей (файлы fig-…) стоят в галереях новостей, но в фототеке только полевые снимки
-const isFigure = (it) => /\/fig[-_][^/]*$/i.test(it.image.original) || /рисунок из статьи/i.test(it.caption || '');
+// Рисунки и схемы из статей (файлы fig-…) стоят в галереях новостей, но в фототеке только полевые снимки.
+// Подпись проверяется на обоих языках: в английском переводе страниц «Рисунок из статьи» = «Figure from the paper»
+const isFigure = (it) => /\/fig[-_][^/]*$/i.test(it.image.original) || /рисунок из статьи|figure from the paper/i.test(it.caption || '');
 
 function collectPhotos(cities, expeditions, posts) {
   const seen = new Set();
