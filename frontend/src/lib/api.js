@@ -49,15 +49,20 @@ export function translationId(id, lang) {
 }
 export const getOne = (type, params = {}) => getByType(type, params).then((items) => items[0] || null);
 
+// Новость или экспедиция по id. На /en с id русской страницы (старые ссылки, EN в новой вкладке) берётся её
+// перевод под своим id, а русская страница с пометкой остаётся, только если перевода нет
+const byId = (type, id) => getOne(type, { id }).then((page) => (!page?._untranslated ? page
+  : translationId(id, 'en').then((enId) => (enId ? getOne(type, { id: enId }) : page))));
+
 export const api = {
   home: () => getOne('home.HomePage'),
   cities: () => getByType('home.CityPage'),
   city: (slug) => getOne('home.CityPage', { slug }),
   reports: () => getByType('home.ReportPage'),
   news: () => getByType('home.BlogPost', { order: '-date' }),
-  post: (id) => getOne('home.BlogPost', { id }),
+  post: (id) => byId('home.BlogPost', id),
   expeditions: () => getByType('home.ExpeditionPage', { order: 'date_start' }),
-  expedition: (id) => getOne('home.ExpeditionPage', { id }),
+  expedition: (id) => byId('home.ExpeditionPage', id),
   team: () => getOne('home.TeamPage'),
   publications: () => getOne('home.PublicationsPage'),
 };
