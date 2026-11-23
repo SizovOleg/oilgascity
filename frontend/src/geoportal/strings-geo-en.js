@@ -11,7 +11,7 @@ export const GEO_EN = {
   'на сайт проекта': 'to the project site',
   'Геопортал': 'Geoportal',
   'Геопортал. OilGasCity': 'Geoportal. OilGasCity',
-  'Город': 'City',
+  'Город': 'Town',
   'Слои': 'Layers',
   'Скрыть слои': 'Hide layers',
   'Слои карты': 'Map layers',
@@ -33,7 +33,7 @@ export const GEO_EN = {
   'Показаны дома: {f}.': 'Buildings shown: {f}.',
   'Показать все': 'Show all',
   'Источник:': 'Source:',
-  'Страница города': 'City page',
+  'Страница города': 'Town page',
   'карты в материалах': 'maps in the materials',
 
   // скачивание

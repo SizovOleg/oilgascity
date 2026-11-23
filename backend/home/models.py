@@ -42,6 +42,9 @@ class FrontendUrlMixin:
         path = self.get_frontend_path()
         if url_parts is None or not base_url or path is None:
             return url_parts
+        # английские страницы фронтенд показывает под /en (frontend/src/lib/i18n.js)
+        if self.locale.language_code == "en":
+            path = "/en" if path == "/" else f"/en{path}"
         site_id = url_parts[0]
         return (site_id, base_url.rstrip("/"), path)
 
