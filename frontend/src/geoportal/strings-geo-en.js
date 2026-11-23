@@ -116,7 +116,7 @@ export const GEO_EN = {
   'тыс. м² жилой площади': 'thousand m² of living area',
   '{} тыс. м²': '{} thousand m²', // единица не разрывается при переносе
   'действующих жилых домов в реестре ГИС ЖКХ': 'residential buildings currently listed in the GIS ZhKH register',
-  'домов на карте с контуром здания': 'buildings mapped with an outline',
+  'домов на карте с контуром здания': 'buildings mapped with a footprint',
   'многоквартирных домов': 'apartment buildings',
   'известной жилой площади': 'of known living area',
   'Жилая площадь домов действующего реестра по десятилетиям постройки, всего {} тыс. м². Домов без года постройки: {}, их известная площадь {} тыс. м².':
@@ -166,8 +166,8 @@ export const GEO_EN = {
   'Сообщество': 'Community',
   'Зона': 'Zone',
   'Жилая площадь, м²': 'Living area, m²',
-  'Контур': 'Outline',
-  'Источник контура': 'Outline source',
+  'Контур': 'Footprint',
+  'Источник контура': 'Footprint source',
   'Описание': 'Description',
   'Название': 'Name',
   'Фото': 'Photos',
@@ -191,7 +191,7 @@ export const GEO_EN = {
   'Возраст жилых домов по реестру ГИС ЖКХ. Цвет показывает десятилетие постройки, по щелчку видны адрес, этажность, квартиры и жилая площадь.':
     'Age of residential buildings from the GIS ZhKH register (the state housing and utilities information system). Colour shows the decade of construction; click a building to see its address, number of storeys, apartments and living area.',
   'ГИС ЖКХ (реестр и карточки домов на 23.10.2026), кадастровые контуры зданий НСПД, вспомогательные контуры OSM':
-    'GIS ZhKH (register and building records as of 23 October 2026), cadastral building outlines from NSPD (National Spatial Data System), auxiliary outlines from OSM',
+    'GIS ZhKH (register and building records as of 23 October 2026), cadastral building footprints from NSPD (National Spatial Data System), auxiliary footprints from OSM',
   'Миляев И.А., Сизов О.С., Федоров Р.Ю., Скрицкая М.К. Региональные геосистемы, 2025, № 3':
     'Milyaev I.A., Sizov O.S., Fedorov R.Yu., Skritskaya M.K. Regional Geosystems, 2025, No. 3',
   'Данные проекта РНФ № 25-27-00022, полевые работы 2026 года': 'RSF project No. 25-27-00022 data, fieldwork 2026',
@@ -239,8 +239,8 @@ export const GEO_EN = {
   'Возраст домов': 'Building age',
   'Жилые дома по десятилетию постройки': 'Residential buildings by decade of construction',
   'Год постройки по карточкам ГИС ЖКХ': 'Year built from GIS ZhKH building records',
-  'Дома по источнику контура': 'Buildings by outline source',
-  'Как дом из реестра связан с контуром здания': 'How a register entry was matched to a building outline',
+  'Дома по источнику контура': 'Buildings by footprint source',
+  'Как дом из реестра связан с контуром здания': 'How a register entry was matched to a building footprint',
 
   // легенды NDVI и классы поверхности
   '-{} и ниже': '-{} and below',
@@ -323,11 +323,11 @@ export const GEO_EN = {
   'НСПД, по кадастровому номеру': 'NSPD, by cadastral number',
   'НСПД, по адресу и общей площади': 'NSPD, by address and total floor area',
   'НСПД, кандидат: совпали адрес, площадь и этажность': 'NSPD, candidate: address, floor area and storeys match',
-  'OSM, вспомогательный контур по адресу': 'OSM, auxiliary outline by address',
+  'OSM, вспомогательный контур по адресу': 'OSM, auxiliary footprint by address',
   'НСПД, по кадастровому номеру: {}': 'NSPD, by cadastral number: {}',
   'НСПД, по адресу и общей площади: {}': 'NSPD, by address and total floor area: {}',
   'НСПД, кандидат: совпали адрес, площадь и этажность: {}': 'NSPD, candidate: address, floor area and storeys match: {}',
-  'OSM, вспомогательный контур по адресу: {}': 'OSM, auxiliary outline by address: {}',
+  'OSM, вспомогательный контур по адресу: {}': 'OSM, auxiliary footprint by address: {}',
 
   // лицензии и ссылки на данные
   '© участники OpenStreetMap': '© OpenStreetMap contributors',
