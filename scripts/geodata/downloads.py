@@ -38,8 +38,9 @@ LICENSES = {
 }
 CC_BY_EN = "https://creativecommons.org/licenses/by/4.0/deed.en"
 GRANT_EN = "RSF project No. 25-27-00022 data"
-PUB_MUR_EN = ("Milyaev I.A., Sizov O.S., Fedorov R.Yu., Skritskaya M.K. Assessment of green infrastructure provision "
-              "for residents of a northern oil and gas town (Muravlenko, Yamal-Nenets Autonomous Okrug). "
+# официальное английское название с сайта журнала (reg-geosystems-journal.ru, article/view/279)
+PUB_MUR_EN = ("Milyaev I.A., Sizov O.S., Fedorov R.Yu., Skritskaya M.K. Assessment of the Green Infrastructure Availability "
+              "for Residents of a Northern Oil-and-Gas Town (Muravlenko, YaNAO). "
               "Regional Geosystems, 2025, No. 3")
 # Английская часть README: перевод строк, которые передаёт build_geodata.py (те же тексты, что в манифесте;
 # словарь фронтенда frontend/src/geoportal/strings-geo-en.js держать согласованным с этим)

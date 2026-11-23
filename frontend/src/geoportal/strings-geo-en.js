@@ -332,7 +332,7 @@ export const GEO_EN = {
   // лицензии и ссылки на данные
   '© участники OpenStreetMap': '© OpenStreetMap contributors',
   'Миляев И.А., Сизов О.С., Федоров Р.Ю., Скрицкая М.К. Оценка обеспеченности зеленой инфраструктурой жителей северного нефтегазового города (г. Муравленко, ЯНАО) // Региональные геосистемы. 2025. № 3. Данные проекта РНФ № 25-27-00022. URL: https://oilgascity.ru/geoportal':
-    'Milyaev I.A., Sizov O.S., Fedorov R.Yu., Skritskaya M.K. Assessment of green infrastructure provision for residents of a northern oil and gas town (Muravlenko, Yamal-Nenets Autonomous Okrug). Regional Geosystems, 2025, No. 3. RSF project No. 25-27-00022 data. URL: https://oilgascity.ru/geoportal',
+    'Milyaev I.A., Sizov O.S., Fedorov R.Yu., Skritskaya M.K. Assessment of the Green Infrastructure Availability for Residents of a Northern Oil-and-Gas Town (Muravlenko, YaNAO). Regional Geosystems, 2025, No. 3. RSF project No. 25-27-00022 data. URL: https://oilgascity.ru/geoportal',
   'Данные проекта РНФ № 25-27-00022, геоботаническая карта Муравленко, 2025. URL: https://oilgascity.ru/geoportal':
     'RSF project No. 25-27-00022 data, vegetation map of Muravlenko, 2025. URL: https://oilgascity.ru/geoportal',
   'Данные проекта РНФ № 25-27-00022, открытые пространства Когалыма, 2026; © участники OpenStreetMap. URL: https://oilgascity.ru/geoportal':
