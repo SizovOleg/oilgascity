@@ -1,11 +1,14 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { T } from './i18n';
+import { T, useLang } from './i18n';
 
+// Заголовок вкладки; язык в зависимостях: при переключении RU/EN страница не пересоздаётся,
+// и заголовок по умолчанию иначе остался бы на прежнем языке
 export function useTitle(title) {
+  const lang = useLang();
   useEffect(() => {
     document.title = title ? `${title}. OilGasCity` : T('OilGasCity: малые города нефтегазового Севера. Проект РНФ 25-27-00022');
-  }, [title]);
+  }, [title, lang]);
 }
 
 // Прокрутка к якорю, когда содержимое страницы загрузилось (ссылки вида /materials#talks).
