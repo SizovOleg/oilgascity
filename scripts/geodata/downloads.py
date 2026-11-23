@@ -19,7 +19,7 @@ import shapely
 PROJECT = ("Проект РНФ № 25-27-00022 «Социально-экологические аспекты развития малых городов как центров "
            "нефтегазового освоения в меняющихся климатических условиях субарктической зоны Западной Сибири»")
 PROJECT_EN = ("RSF project No. 25-27-00022 \"Socio-ecological aspects of the development of small towns as centres "
-              "of oil and gas exploitation under a changing climate in the subarctic zone of Western Siberia\"")
+              "of oil and gas development under a changing climate in the subarctic zone of Western Siberia\"")
 SITE = "https://oilgascity.ru/geoportal"
 # название, адрес, условия по-русски, условия по-английски
 LICENSES = {
