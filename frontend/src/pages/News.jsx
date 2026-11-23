@@ -3,7 +3,7 @@ import { LLink as Link, T } from '../lib/i18n';
 import { api, useData } from '../lib/api';
 import { useTitle } from '../lib/hooks';
 import { formatDate, formatRange, plain } from '../lib/format';
-import { Html, Loading, PageHead, PhotoMeta } from '../components/Common';
+import { Html, Loading, PageHead, PhotoMeta, UntranslatedNote } from '../components/Common';
 import { ZoomLink } from '../components/Lightbox';
 import { galleryItems } from '../lib/lightbox';
 
@@ -33,9 +33,10 @@ export function NewsList() {
       <div className="wrap">
         <PageHead crumbs={<><Link to="/">{T('Главная')}</Link> / {T('Новости')}</>} title={T('Новости проекта')}
           deck={T('Экспедиции, доклады на конференциях, публикации и итоги этапов гранта.')} />
+        <UntranslatedNote show={data.some((p) => p._untranslated)} />
         <ul className="news-list">
           {data.map((p) => (
-            <li key={p.id}>
+            <li key={p.id} lang={p._untranslated ? 'ru' : undefined}>
               {p.header_image ? <Link to={`/news/${p.id}`}><img src={p.header_image.thumbnail} alt="" loading="lazy" /></Link> : <span className="noimg" />}
               <div>
                 <span className="day">{formatDate(p.date)}</span>
