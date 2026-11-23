@@ -525,12 +525,50 @@ function AttrPanel({ city, layer, ver, filter, mapRef, height, minimized, onHeig
   }, [rows, q, sort, inView, view, filter, layer, cols]);
 
   const total = rows ? rows.filter((r) => !(layer.filter && filter && r.p[layer.filter] !== filter)).length : 0;
-  // ширина колонок по самому длинному значению в первых строках (таблица с фиксированной раскладкой не прыгает при прокрутке)
-  const widths = useMemo(() => cols.map(([c, label]) => {
-    let n = label.length + 2;
-    for (const r of (rows || []).slice(0, 400)) n = Math.max(n, cellText(c, r.p[c]).length);
-    return Math.min(Math.max(n, 6), 42) + 2;
-  }), [rows, cols]);
+  // ширина колонок по умолчанию: по самому длинному значению в первых строках (раскладка фиксированная, таблица
+  // не прыгает при прокрутке); посетитель меняет её, потянув край заголовка, ширина запоминается для слоя
+  const CH = 7.2; // ширина знака шрифта таблицы, px
+  const autoW = useMemo(() => {
+    const w = { '#': Math.round((String(rows?.length || 0).length + 3) * CH + 18) };
+    for (const [c, label] of cols) {
+      let n = label.length + 2;
+      for (const r of (rows || []).slice(0, 400)) n = Math.max(n, cellText(c, r.p[c]).length);
+      w[c] = Math.round((Math.min(Math.max(n, 6), 42) + 2) * CH + 18);
+    }
+    return w;
+  }, [rows, cols]);
+  const colsKey = `gp-attr-cols:${city}:${layer.id}`;
+  const [userW, setUserW] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(colsKey) || '{}'); } catch { return {}; }
+  });
+  const widthOf = (c) => userW[c] || autoW[c] || 120;
+  const keys = ['#', ...cols.map(([c]) => c)];
+  const saveW = (next) => {
+    try { localStorage.setItem(colsKey, JSON.stringify(next)); } catch { /* хранилище недоступно: ширина не запомнится */ }
+  };
+  const startCol = (e, c) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const x0 = e.clientX;
+    const w0 = widthOf(c);
+    let next = userW;
+    const move = (ev) => { next = { ...userW, [c]: Math.max(40, Math.round(w0 + ev.clientX - x0)) }; setUserW(next); };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      document.body.classList.remove('gp-resizing');
+      saveW(next);
+    };
+    document.body.classList.add('gp-resizing');
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const autoCol = (c) => { const next = { ...userW }; delete next[c]; setUserW(next); saveW(next); };
+  const resizer = (c, label) => (
+    <span className="gp-col-rs" role="separator" aria-orientation="vertical" aria-label={`Ширина колонки «${label}»`}
+      title="Потяните, чтобы изменить ширину; двойной щелчок вернёт ширину по содержимому"
+      onPointerDown={(e) => startCol(e, c)} onDoubleClick={() => autoCol(c)} onClick={(e) => e.stopPropagation()} />
+  );
   const numCols = useMemo(() => new Set(cols.filter(([c]) => rows?.some((r) => typeof r.p[c] === 'number')).map(([c]) => c)), [rows, cols]);
 
   const scrollTo = useCallback((i) => {
@@ -642,19 +680,20 @@ function AttrPanel({ city, layer, ver, filter, mapRef, height, minimized, onHeig
           {!rows ? <p className="gp-attr-msg">Загрузка таблицы…</p> : null}
           {rows && !shown.length ? <p className="gp-attr-msg">Нет строк{q ? ' по этому запросу' : ''}.</p> : null}
           {shown.length ? (
-            <table style={{ width: `calc(${String(shown.length).length + 3}ch + ${widths.reduce((a, b) => a + b, 0)}ch + ${cols.length + 1} * 1.1rem)` }}>
+            <table style={{ width: keys.reduce((a, c) => a + widthOf(c), 0) }}>
               <colgroup>
-                <col style={{ width: `calc(${String(rows.length).length + 3}ch + 1.1rem)` }} />
-                {widths.map((w, k) => <col key={cols[k][0]} style={{ width: `calc(${w}ch + 1.1rem)` }} />)}
+                {keys.map((c) => <col key={c} style={{ width: widthOf(c) }} />)}
               </colgroup>
               <thead>
                 <tr>
                   <th className="num" aria-sort={sort.key === '#' ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
                     <button type="button" onClick={() => sortBy('#')} title="Номер объекта в слое">№{arrow('#')}</button>
+                    {resizer('#', '№')}
                   </th>
                   {cols.map(([c, label]) => (
                     <th key={c} className={numCols.has(c) ? 'num' : ''} aria-sort={sort.key === c ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
-                      <button type="button" onClick={() => sortBy(c)}>{label}{arrow(c)}</button>
+                      <button type="button" onClick={() => sortBy(c)} title={label}>{label}{arrow(c)}</button>
+                      {resizer(c, label)}
                     </th>
                   ))}
                 </tr>
