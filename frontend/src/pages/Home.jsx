@@ -117,7 +117,8 @@ function About({ home }) {
 }
 
 function Years({ home, reports }) {
-  const years = reports.filter((r) => r.kind === 'results').sort((a, b) => a.year - b.year);
+  // только страницы с годом: «Общие выводы» (результаты без года) в блок по годам не входят
+  const years = reports.filter((r) => r.kind === 'results' && r.year).sort((a, b) => a.year - b.year);
   if (!years.length) return null;
   const withResults = years.filter((r) => (r.body || []).some((b) => b.type === 'result')).length;
   return (
