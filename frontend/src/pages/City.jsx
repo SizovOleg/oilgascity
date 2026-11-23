@@ -1,4 +1,5 @@
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Navigate, useParams } from 'react-router-dom';
+import { LLink as Link, T, currentLang, localePath } from '../lib/i18n';
 import { api, useData } from '../lib/api';
 import { useHashScroll, useTitle } from '../lib/hooks';
 import { splitFigure } from '../lib/format';
@@ -11,18 +12,19 @@ import { BlockList, Section } from '../blocks/Blocks';
 const OTHER = { muravlenko: 'kogalym', kogalym: 'muravlenko' };
 
 function FactsRow({ city }) {
-  const row = (label) => city.passport?.find((r) => r.value.label === label)?.value.value;
+  // строка паспорта по названию: на английской странице название переведено (EN в lib/strings-en.js)
+  const row = (label) => city.passport?.find((r) => r.value.label === label || r.value.label === T(label))?.value.value;
   const founded = splitFigure(city.founded);
   const people = splitFigure(city.population);
   const facts = [];
-  if (founded.value) facts.push([founded.value, `год основания${founded.rest ? `, ${founded.rest.replace(/[()]/g, '')}` : ''}`]);
-  if (people.value) facts.push([people.value, `жителей ${people.rest.replace(/^чел\.?\s*/, '')}`.trim()]);
+  if (founded.value) facts.push([founded.value, `${T('год основания')}${founded.rest ? `, ${founded.rest.replace(/[()]/g, '')}` : ''}`]);
+  if (people.value) facts.push([people.value, `${T('жителей')} ${people.rest.replace(/^(чел\.?|people|residents|inhabitants)\s*/i, '')}`.trim()]);
   const interviews = row('Интервью');
   if (interviews) {
     const s = splitFigure(interviews);
-    facts.push([s.value, `интервью с жителями${s.rest ? ` ${s.rest.replace(/^,\s*/, ', ')}` : ''}`]);
-  } else if (row('Полевые работы проекта')) facts.push([row('Полевые работы проекта'), 'полевые работы проекта']);
-  if (row('Снимков в архиве')) facts.push([row('Снимков в архиве'), 'полевых снимков в архиве']);
+    facts.push([s.value, `${T('интервью с жителями')}${s.rest ? ` ${s.rest.replace(/^,\s*/, ', ')}` : ''}`]);
+  } else if (row('Полевые работы проекта')) facts.push([row('Полевые работы проекта'), T('полевые работы проекта')]);
+  if (row('Снимков в архиве')) facts.push([row('Снимков в архиве'), T('полевых снимков в архиве')]);
   return <ul className="facts-row">{facts.map(([v, l], i) => <li key={i}><b>{v}</b>{l}</li>)}</ul>;
 }
 
@@ -31,8 +33,8 @@ function Gallery({ city }) {
   if (!items.length) return null;
   return (
     <section className="sec" id="gallery">
-      <h2>Город в снимках</h2>
-      <p className="measure">Открытые пространства города. Все снимки проекта собраны в разделе <Link to="/materials#photos">«Фототека»</Link>.</p>
+      <h2>{T('Город в снимках')}</h2>
+      <p className="measure">{T('Открытые пространства города. Все снимки проекта собраны в разделе')} <Link to="/materials#photos">{T('«Фототека»')}</Link>.</p>
       <div className="sheet">
         {items.map((it, i) => (
           <figure key={it.id}>
@@ -55,10 +57,10 @@ function OtherCity({ city }) {
           {city.header_caption ? <span className="slate">{city.header_caption}</span> : null}
         </Link>
         <div className="plate fogged">
-          <p className="small mute" style={{ marginBottom: '0.4rem' }}>Второй модельный город</p>
+          <p className="small mute" style={{ marginBottom: '0.4rem' }}>{T('Второй модельный город')}</p>
           <h3 className="other-title"><Link to={`/cities/${city.meta.slug}`}>{city.title}</Link></h3>
           <p>{city.lead || city.region}</p>
-          <Link className="more" to={`/cities/${city.meta.slug}`}>Открыть страницу города</Link>
+          <Link className="more" to={`/cities/${city.meta.slug}`}>{T('Открыть страницу города')}</Link>
         </div>
       </div>
     </section>
@@ -75,7 +77,7 @@ export default function City() {
   if (!data) return <Loading error={error} />;
   if (!city) return <Loading error />;
   // старые ссылки вида /cities/11 ведут на адрес со слагом
-  if (String(city.id) === slug) return <Navigate to={`/cities/${city.meta.slug}`} replace />;
+  if (String(city.id) === slug) return <Navigate to={localePath(currentLang(), `/cities/${city.meta.slug}`)} replace />;
 
   const counter = new Counter();
   const mapFig = city.passport_map
@@ -87,10 +89,10 @@ export default function City() {
   const intro = parts[0] && !parts[0].section ? parts.shift().blocks : [];
   const hasSources = parts.some((p) => p.section?.anchor === 'sources');
   const toc = [
-    city.passport?.length ? { anchor: 'passport', title: 'Паспорт города' } : null,
-    city.description ? { anchor: 'history', title: city.history_title || 'О городе' } : null,
+    city.passport?.length ? { anchor: 'passport', title: T('Паспорт города') } : null,
+    city.description ? { anchor: 'history', title: city.history_title || T('О городе') } : null,
     ...buildToc(blocks).filter((t) => t.anchor !== 'sources' && t.anchor !== 'cite'),
-    city.city_gallery?.length ? { anchor: 'gallery', title: 'Город в снимках' } : null,
+    city.city_gallery?.length ? { anchor: 'gallery', title: T('Город в снимках') } : null,
     ...buildToc(blocks).filter((t) => t.anchor === 'sources' || t.anchor === 'cite'),
   ].filter(Boolean);
   const other = cities.find((c) => c.meta.slug === OTHER[city.meta.slug]);
@@ -101,7 +103,7 @@ export default function City() {
         {city.header_image ? <img src={city.header_image.large} alt={city.header_caption || ''} /> : null}
         <div className="wrap cover-wrap">
           <div className="cover-plate">
-            <p className="crumbs"><Link to="/">Главная</Link> / Модельные города</p>
+            <p className="crumbs"><Link to="/">{T('Главная')}</Link> / {T('Модельные города')}</p>
             <h1>{city.title}</h1>
             {city.lead ? <p className="deck">{city.lead}</p> : null}
           </div>
@@ -116,10 +118,10 @@ export default function City() {
           <div>
             {city.passport?.length ? (
               <section className="sec" id="passport">
-                <h2>Паспорт города</h2>
+                <h2>{T('Паспорт города')}</h2>
                 <div className={mapFig ? 'figs2 passport' : 'passport'}>
                   <table className="ref">
-                    <caption><b>Табл. {passportTable}.</b> Справочные сведения: {city.title}</caption>
+                    <caption><b>{T('Табл.')} {passportTable}.</b> {T('Справочные сведения:')} {city.title}</caption>
                     <tbody>
                       {city.passport.map((r) => (
                         <tr key={r.id}><th>{r.value.label}</th><td>{r.value.value}</td></tr>
@@ -134,7 +136,7 @@ export default function City() {
 
             {city.description ? (
               <section className="sec" id="history">
-                <h2>{city.history_title || 'О городе'}</h2>
+                <h2>{city.history_title || T('О городе')}</h2>
                 <Html html={city.description} className="measure prose" />
                 <BlockList blocks={intro} />
               </section>
@@ -152,9 +154,9 @@ export default function City() {
         </div>
       </div>
 
-      <GeoBand title={`${city.title} на геопортале`} to={`/geoportal?city=${city.meta.slug}`}
+      <GeoBand title={`${city.title} ${T('на геопортале')}`} to={`/geoportal?city=${city.meta.slug}`}
         image={`/img/geoportal-${city.meta.slug}.jpg`}
-        text="Карты из статей проекта в интерактивном виде: типы поверхности, NDVI, зелёные пространства, пешеходная доступность." />
+        text={T('Карты из статей проекта в интерактивном виде: типы поверхности, NDVI, зелёные пространства, пешеходная доступность.')} />
     </main>
   );
 }

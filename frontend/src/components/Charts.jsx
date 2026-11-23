@@ -1,5 +1,6 @@
 // Графики справочного слоя: горизонтальные полосы и «было и стало». Простой SVG без библиотек.
 import { InlineHtml, Source } from './Common';
+import { T } from '../lib/i18n';
 
 const COLORS = { green: '#1E3329', tape: '#C2410C', lake: '#1F5C7A', ink: '#14242B' };
 
@@ -25,7 +26,7 @@ export function BarChart({ value }) {
           <li key={i}><span className="lab">{r.label}</span><Bar pct={r.pct} color={r.color} /><b>{r.value}</b></li>
         ))}
       </ul>
-      <figcaption className="slate">{n ? <b>Рис. {n}.</b> : null} {value.caption}<Source text={value.source} /></figcaption>
+      <figcaption className="slate">{n ? <b>{T('Рис.')} {n}.</b> : null} {value.caption}<Source text={value.source} /></figcaption>
     </figure>
   );
 }
@@ -44,7 +45,7 @@ export function PairChart({ value }) {
   const y = (v) => bottom - ((v - (lo - pad)) / (hi - lo + 2 * pad)) * (bottom - top);
   const x1 = 70;
   const x2 = 230;
-  const label = series.map((s) => `${s.label}: с ${fmt(s.start)} до ${fmt(s.end)} ${s.unit || ''}`).join('; ');
+  const label = series.map((s) => `${s.label}: ${T('с')} ${fmt(s.start)} ${T('до')} ${fmt(s.end)} ${s.unit || ''}`).join('; ');
   return (
     <figure className="chart" id={value.anchor || (n ? `fig-${n}` : undefined)}>
       {value.anchor && n ? <span id={`fig-${n}`} /> : null}
@@ -72,7 +73,7 @@ export function PairChart({ value }) {
         <text x={x1} y="286" textAnchor="middle" fontSize="14" fontWeight="700" fill="#14242B">{value.start_label}</text>
         <text x={x2} y="286" textAnchor="middle" fontSize="14" fontWeight="700" fill="#14242B">{value.end_label}</text>
       </svg>
-      <figcaption className="slate">{n ? <b>Рис. {n}.</b> : null} {value.caption}<Source text={value.source} /></figcaption>
+      <figcaption className="slate">{n ? <b>{T('Рис.')} {n}.</b> : null} {value.caption}<Source text={value.source} /></figcaption>
     </figure>
   );
 }

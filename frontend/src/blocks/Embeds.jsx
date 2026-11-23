@@ -1,11 +1,12 @@
 // Вставки данных других разделов в страницы материалов: публикации, экспедиции, коллектив, фототека.
 import { useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { LLink as Link, T, currentLang } from '../lib/i18n';
 import { api, useData } from '../lib/api';
 import { formatDate, formatRange, photoGroups, THEME_LABELS, STATUS_LABELS } from '../lib/format';
 import { Html, InlineHtml, PhotoMeta } from '../components/Common';
 import { ZoomLink } from '../components/Lightbox';
 import { galleryItems } from '../lib/lightbox';
+import { Email } from '../lib/email';
 
 function PubEntry({ p }) {
   const status = STATUS_LABELS[p.status];
@@ -14,8 +15,8 @@ function PubEntry({ p }) {
   return (
     <li>
       {text}
-      {status ? <span className={`chip ${status.cls}`}>{status.text}</span> : null}
-      {link ? <span className="src"><a href={link}>Текст статьи</a></span> : null}
+      {status ? <span className={`chip ${status.cls}`}>{T(status.text)}</span> : null}
+      {link ? <span className="src"><a href={link}>{T('Текст статьи')}</a></span> : null}
     </li>
   );
 }
@@ -31,7 +32,7 @@ function Publications() {
       <ol className="bib">{main.map((p) => <PubEntry key={p.id} p={p} />)}</ol>
       {related.length ? (
         <>
-          <h3>Смежные публикации участников</h3>
+          <h3>{T('Смежные публикации участников')}</h3>
           <ol className="bib">{related.map((p) => <PubEntry key={p.id} p={p} />)}</ol>
         </>
       ) : null}
@@ -63,7 +64,7 @@ function Expeditions() {
         <span className="when">{formatRange(e.date_start, e.date_end)}</span>
       </div>
       <Html html={e.description} className="measure prose" />
-      <Strip items={e.expedition_gallery} label={`Снимки экспедиции: ${e.title}`} />
+      <Strip items={e.expedition_gallery} label={`${T('Снимки экспедиции:')} ${e.title}`} />
     </article>
   ));
 }
@@ -81,6 +82,7 @@ function Team() {
           <h4>{m.name}</h4>
           {m.role ? <p className="role">{m.role}</p> : null}
           {m.position ? <p>{m.position}</p> : null}
+          {m.email ? <p className="small"><Email hidden={m.email} /></p> : null}
           <p className="small links">
             {m.orcid ? <a href={m.orcid}>ORCID</a> : null}
             {m.elibrary ? <a href={m.elibrary}>eLIBRARY</a> : null}
@@ -111,7 +113,7 @@ export function NewsLog({ posts, limit = 4 }) {
             </li>
           ))}
         </ul>
-        <p style={{ marginTop: '0.9rem' }}><Link className="more" to="/news">Все новости проекта</Link></p>
+        <p style={{ marginTop: '0.9rem' }}><Link className="more" to="/news">{T('Все новости проекта')}</Link></p>
       </div>
     </div>
   );
@@ -132,7 +134,7 @@ export function Embed({ kind }) {
 
 // ------------------------------------------------------------------ фототека
 
-const cityOf = (place) => (/когалым/i.test(place) ? 'kog' : 'mur');
+const cityOf = (place) => (/когалым|kogalym/i.test(place) ? 'kog' : 'mur');
 const yearOf = (date) => (date.match(/20\d\d/) || [''])[0];
 const COLLAPSED = 12; // снимков в свёрнутой фототеке: три ряда по четыре
 
@@ -146,9 +148,9 @@ function collectPhotos(cities, expeditions, posts) {
       out.push({ ...it, place, city: cityOf(place), year: yearOf(it.shot_date || '') });
     }
   };
-  for (const e of expeditions) add(e.expedition_gallery, /когалым/i.test(e.title + e.location) ? 'Когалым' : 'Муравленко');
+  for (const e of expeditions) add(e.expedition_gallery, /когалым|kogalym/i.test(e.title + e.location) ? T('Когалым') : T('Муравленко'));
   for (const c of cities) add(c.city_gallery, c.title);
-  for (const p of posts) add(p.blog_gallery, /когалым/i.test(p.title) ? 'Когалым' : 'Муравленко');
+  for (const p of posts) add(p.blog_gallery, /когалым|kogalym/i.test(p.title) ? T('Когалым') : T('Муравленко'));
   return out;
 }
 
@@ -180,7 +182,7 @@ export function PhotoLibrary({ value }) {
   // число снимков у кнопки фильтра при остальных выбранных фильтрах
   const countBy = (group, value) => photos.filter((p) => pass(p, group) && (value === 'all' || p[group] === value)).length;
   const visible = open ? shown : shown.slice(0, COLLAPSED);
-  const fmt = (n) => n.toLocaleString('ru-RU');
+  const fmt = (n) => n.toLocaleString(currentLang() === 'en' ? 'en-GB' : 'ru-RU');
   const groups = photoGroups(value.counts);
   const archived = groups.reduce((s, g) => s + g.total, 0);
   const collapse = () => {
@@ -194,33 +196,33 @@ export function PhotoLibrary({ value }) {
       <InlineHtml html={value.intro} as="p" className="measure" />
       {photos.length && archived ? (
         <p className="measure archive-note">
-          Всего в экспедициях получено <b>{fmt(archived)}</b> снимков. На сайте опубликовано <b>{fmt(photos.length)}</b>:
-          отобранные кадры с подписями. Остальные хранятся в архиве проекта.
+          {T('Всего в экспедициях получено')} <b>{fmt(archived)}</b> {T('снимков. На сайте опубликовано')} <b>{fmt(photos.length)}</b>:
+          {' '}{T('отобранные кадры с подписями. Остальные хранятся в архиве проекта.')}
         </p>
       ) : null}
       {groups.map((g) => (
         <div key={g.key} className="count-group">
-          <h3>{g.key}: {fmt(g.total)} снимков в архиве, {fmt(photos.filter((p) => p.city === cityOf(g.key)).length)} на сайте</h3>
+          <h3>{g.key}: {fmt(g.total)} {T('снимков в архиве')}, {fmt(photos.filter((p) => p.city === cityOf(g.key)).length)} {T('на сайте')}</h3>
           {g.items.length ? (
             <ul className="counts">{g.items.map((c, i) => <li key={i}>{c.theme} <b>{c.count}</b></li>)}</ul>
           ) : null}
         </div>
       ))}
-      <div className="filters" role="group" aria-label="Фильтры фототеки" ref={topRef}>
-        <FilterGroup label="Город" group="city" state={state} setState={setState}
-          options={[['all', 'все'], ['mur', 'Муравленко'], ['kog', 'Когалым']].map(([v, t]) => [v, t, countBy('city', v)])} />
-        <FilterGroup label="Тема" group="theme" state={state} setState={setState}
-          options={[['all', 'все'], ...themes.map((t) => [t, THEME_LABELS[t] || t])].map(([v, t]) => [v, t, countBy('theme', v)])} />
-        <FilterGroup label="Год" group="year" state={state} setState={setState}
-          options={[['all', 'все'], ...years.map((y) => [y, y])].map(([v, t]) => [v, t, countBy('year', v)])} />
+      <div className="filters" role="group" aria-label={T('Фильтры фототеки')} ref={topRef}>
+        <FilterGroup label={T('Город')} group="city" state={state} setState={setState}
+          options={[['all', T('все')], ['mur', T('Муравленко')], ['kog', T('Когалым')]].map(([v, t]) => [v, t, countBy('city', v)])} />
+        <FilterGroup label={T('Тема')} group="theme" state={state} setState={setState}
+          options={[['all', T('все')], ...themes.map((t) => [t, T(THEME_LABELS[t] || t)])].map(([v, t]) => [v, t, countBy('theme', v)])} />
+        <FilterGroup label={T('Год')} group="year" state={state} setState={setState}
+          options={[['all', T('все')], ...years.map((y) => [y, y])].map(([v, t]) => [v, t, countBy('year', v)])} />
       </div>
-      <p className="shown">Показано снимков: <b>{shown.length}</b></p>
+      <p className="shown">{T('Показано снимков:')} <b>{shown.length}</b></p>
       <ul className="shots">
         {visible.map((p, i) => (
           <li key={p.image.original}>
             <ZoomLink items={galleryItems(shown)} index={i}><img src={p.image.thumbnail} alt={p.caption} loading="lazy" /></ZoomLink>
             <span className="slate">{p.caption}
-              <PhotoMeta place={p.place} date={p.shot_date} theme={THEME_LABELS[p.theme]} author={p.author} />
+              <PhotoMeta place={p.place} date={p.shot_date} theme={T(THEME_LABELS[p.theme] || '')} author={p.author} />
             </span>
           </li>
         ))}
@@ -228,8 +230,8 @@ export function PhotoLibrary({ value }) {
       {shown.length > COLLAPSED ? (
         <p className="shots-more">
           {open
-            ? <button type="button" onClick={collapse}>Свернуть фототеку</button>
-            : <button type="button" onClick={() => setOpen(true)}>Показать все {fmt(shown.length)} снимков</button>}
+            ? <button type="button" onClick={collapse}>{T('Свернуть фототеку')}</button>
+            : <button type="button" onClick={() => setOpen(true)}>{T('Показать все {n} снимков').replace('{n}', fmt(shown.length))}</button>}
         </p>
       ) : null}
     </>

@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { T } from './i18n';
 
 export function useTitle(title) {
   useEffect(() => {
-    document.title = title ? `${title}. OilGasCity` : 'OilGasCity: малые города нефтегазового Севера. Проект РНФ 25-27-00022';
+    document.title = title ? `${title}. OilGasCity` : T('OilGasCity: малые города нефтегазового Севера. Проект РНФ 25-27-00022');
   }, [title]);
 }
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { LLink, useT } from '../lib/i18n';
 import { PinIcon } from './Icons';
 import { ZoomLink } from './Lightbox';
 import { inline } from '../lib/format';
@@ -19,36 +19,39 @@ export function InlineHtml({ html, as = 'span', className }) {
 
 // Справочная строка под снимком: место, дата, тема, автор
 export function PhotoMeta({ place, date, theme, author, text }) {
+  const t = useT();
   const parts = [];
   if (text) parts.push(text);
   else {
     const where = [place, date].filter(Boolean).join(', ');
     if (where) parts.push(`${where}.`);
-    if (theme) parts.push(`Тема: ${theme}.`);
+    if (theme) parts.push(`${t('Тема:')} ${theme}.`);
   }
-  if (author) parts.push(`Фото: ${author}.`);
+  if (author) parts.push(`${t('Фото:')} ${author}.`);
   if (!parts.length) return null;
   return <span className="meta">{parts.join(' ')}</span>;
 }
 
-const withSourcePrefix = (s) => (/^источник/i.test(s) ? s : `Источник: ${s}`);
+const withSourcePrefix = (s, t) => (/^(источник|source)/i.test(s) ? s : `${t('Источник:')} ${s}`);
 
 export function Source({ text, html }) {
+  const t = useT();
   if (html) return <span className="src" dangerouslySetInnerHTML={{ __html: inline(html) }} />;
   if (!text) return null;
-  return <span className="src">{withSourcePrefix(text)}</span>;
+  return <span className="src">{withSourcePrefix(text, t)}</span>;
 }
 
 // Рисунок: снимок с метаданными или карта в рамке. Щелчок открывает полный размер в окне на странице.
 // ratio: общая пропорция рамки для карт одного ряда (атлас), чтобы рамки были одной высоты
 export function Figure({ fig, className = '', compact = false, ratio }) {
+  const t = useT();
   if (!fig?.image) return null;
   const n = fig._fig;
   const id = n ? `fig-${n}` : undefined;
-  const label = n ? <b>Рис. {n}.</b> : null;
+  const label = n ? <b>{t('Рис.')} {n}.</b> : null;
   const zoom = [{
     src: fig.image.original, preview: fig.image.large, width: fig.image.width, height: fig.image.height,
-    caption: `${n ? `Рис. ${n}. ` : ''}${fig.caption || ''}`,
+    caption: `${n ? `${t('Рис.')} ${n}. ` : ''}${fig.caption || ''}`,
   }];
   if (fig.kind === 'map') {
     return (
@@ -73,12 +76,13 @@ export function Figure({ fig, className = '', compact = false, ratio }) {
 }
 
 export function Toc({ items }) {
+  const t = useT();
   if (!items?.length) return null;
   // на телефоне оглавление свёрнуто, на компьютере раскрыто
   const open = typeof window === 'undefined' || !window.matchMedia('(max-width: 900px)').matches;
   return (
     <details className="toc" open={open}>
-      <summary>Содержание</summary>
+      <summary>{t('Содержание')}</summary>
       <ol>
         {items.map((it) => (
           <li key={it.anchor}>
@@ -94,17 +98,18 @@ export function Toc({ items }) {
 }
 
 export function Cite({ text, note }) {
+  const t = useT();
   const [status, setStatus] = useState('');
   const copy = () => {
     if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).then(() => setStatus('Скопировано'), () => setStatus('Не удалось скопировать, выделите текст вручную'));
-    } else setStatus('Не удалось скопировать, выделите текст вручную');
+      navigator.clipboard.writeText(text).then(() => setStatus(t('Скопировано')), () => setStatus(t('Не удалось скопировать, выделите текст вручную')));
+    } else setStatus(t('Не удалось скопировать, выделите текст вручную'));
   };
   return (
     <>
       <div className="cite">
         <p>{text}</p>
-        <button type="button" onClick={copy}>Скопировать ссылку</button>
+        <button type="button" onClick={copy}>{t('Скопировать ссылку')}</button>
         <output aria-live="polite">{status}</output>
       </div>
       {note ? <InlineHtml html={note} as="p" className="small mute cite-note" /> : null}
@@ -123,19 +128,20 @@ export function Stats({ items, className = 'figures' }) {
   );
 }
 
-export function GeoBand({ title = 'Геопортал', text, to = '/geoportal', image = '/img/geoportal-muravlenko.jpg' }) {
+export function GeoBand({ title, text, to = '/geoportal', image = '/img/geoportal-muravlenko.jpg' }) {
+  const t = useT();
   return (
     <section className="portal" id="geoportal">
       <div className="wrap">
         <div>
-          <h2>{title}</h2>
-          <p>{text || 'Карты из статей проекта и возраст жилых домов на одной интерактивной карте: зелёная инфраструктура, типы поверхности, NDVI, пешеходная доступность. Открывается в полном окне.'}</p>
-          <Link className="geo-btn" to={to}><PinIcon />Открыть геопортал</Link>
+          <h2>{title || t('Геопортал')}</h2>
+          <p>{text || t('Карты из статей проекта и возраст жилых домов на одной интерактивной карте: зелёная инфраструктура, типы поверхности, NDVI, пешеходная доступность. Открывается в полном окне.')}</p>
+          <LLink className="geo-btn" to={to}><PinIcon />{t('Открыть геопортал')}</LLink>
         </div>
         {image ? (
-          <Link className="portal-shot" to={to} aria-label="Открыть геопортал">
-            <img src={image} alt="Фрагмент геопортала: панель слоёв и карта города" loading="lazy" width="984" height="656" />
-          </Link>
+          <LLink className="portal-shot" to={to} aria-label={t('Открыть геопортал')}>
+            <img src={image} alt={t('Фрагмент геопортала: панель слоёв и карта города')} loading="lazy" width="984" height="656" />
+          </LLink>
         ) : null}
       </div>
     </section>
@@ -143,9 +149,10 @@ export function GeoBand({ title = 'Геопортал', text, to = '/geoportal',
 }
 
 export function Loading({ error }) {
+  const t = useT();
   return (
     <main className="wrap state">
-      {error ? <p>Не удалось загрузить страницу. Попробуйте обновить её чуть позже.</p> : <p className="mute">Загрузка...</p>}
+      {error ? <p>{t('Не удалось загрузить страницу. Попробуйте обновить её чуть позже.')}</p> : <p className="mute">{t('Загрузка...')}</p>}
     </main>
   );
 }

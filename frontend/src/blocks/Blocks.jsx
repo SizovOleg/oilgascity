@@ -2,25 +2,27 @@
 import { Figure, Html, InlineHtml, Cite, Stats, Source } from '../components/Common';
 import { BarChart, PairChart } from '../components/Charts';
 import { Embed, PhotoLibrary } from './Embeds';
+import { T } from '../lib/i18n';
 
 const STATUS = { done: ['выполнено', 'done'], partial: ['выполнено частично', 'wait'], progress: ['в работе', 'wait'] };
 
 function Result({ value: v }) {
-  const [label, cls] = STATUS[v.status] || STATUS.done;
+  const [ru, cls] = STATUS[v.status] || STATUS.done;
+  const label = T(ru);
   return (
     <article className="res" id={`r${v.number}`}>
       <div className="num">{v.number}</div>
       <div className="ask">
         <h3>{v.title}</h3>
-        <b>Заявлено</b><InlineHtml html={v.planned} />
+        <b>{T('Заявлено')}</b><InlineHtml html={v.planned} />
       </div>
       <div className="got">
-        <b className="lab">Сделано <span className={`chip ${cls}`}>{label}</span></b>
+        <b className="lab">{T('Сделано')} <span className={`chip ${cls}`}>{label}</span></b>
         {v.key_figures?.length ? (
           <div className="keyfig">{v.key_figures.map((k, i) => <div key={i}><b>{k.value}</b>{k.label}</div>)}</div>
         ) : null}
         <ul>{(v.done || []).map((d, i) => <InlineHtml key={i} html={d} as="li" />)}</ul>
-        {v.evidence ? <p className="proof"><b>Доказательства:</b> <InlineHtml html={v.evidence} /></p> : null}
+        {v.evidence ? <p className="proof"><b>{T('Доказательства:')}</b> <InlineHtml html={v.evidence} /></p> : null}
         {(v.figures || []).map((f, i) => (
           <div key={i} className={f.kind === 'map' ? 'res-map' : ''}><Figure fig={f} compact={f.kind !== 'map'} /></div>
         ))}
@@ -33,8 +35,8 @@ function MethodsTable({ value: v }) {
   return (
     <>
       <table className="ref wide">
-        <caption><b>Табл. {v._table}.</b> {v.caption}</caption>
-        <thead><tr><th>Метод</th><th>Данные и параметры</th><th>Что получено</th></tr></thead>
+        <caption><b>{T('Табл.')} {v._table}.</b> {v.caption}</caption>
+        <thead><tr><th>{T('Метод')}</th><th>{T('Данные и параметры')}</th><th>{T('Что получено')}</th></tr></thead>
         <tbody>
           {v.rows.map((r, i) => (
             <tr key={i}><th>{r.method}</th><InlineHtml html={r.details} as="td" /><td>{r.output}</td></tr>
@@ -86,8 +88,8 @@ function Talks({ value: v }) {
   return (
     <>
       <table className="ref wide talks">
-        <caption><b>Табл. {v._table}.</b> Доклады по результатам проекта</caption>
-        <thead><tr><th style={{ width: '2rem' }}>№</th><th>Авторы и тема</th><th>Конференция</th><th>Место и даты</th><th>Форма</th></tr></thead>
+        <caption><b>{T('Табл.')} {v._table}.</b> {T('Доклады по результатам проекта')}</caption>
+        <thead><tr><th style={{ width: '2rem' }}>№</th><th>{T('Авторы и тема')}</th><th>{T('Конференция')}</th><th>{T('Место и даты')}</th><th>{T('Форма')}</th></tr></thead>
         <tbody>
           {v.items.map((t, i) => (
             <tr key={i}><th>{i + 1}</th><td>{t.authors} <b>{t.title}</b></td><td>{t.event}</td><td>{t.place}, {t.dates}</td><td>{t.form}</td></tr>
@@ -95,7 +97,7 @@ function Talks({ value: v }) {
         </tbody>
       </table>
       <details className="en bib-details">
-        <summary>Те же доклады в виде библиографических записей</summary>
+        <summary>{T('Те же доклады в виде библиографических записей')}</summary>
         <ol className="bib">
           {v.items.map((t, i) => <li key={i}>{t.authors} {t.title} : {t.form} // {t.event} ({t.place}, {t.dates}).</li>)}
         </ol>

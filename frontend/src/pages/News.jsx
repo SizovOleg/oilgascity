@@ -1,4 +1,5 @@
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { LLink as Link, T } from '../lib/i18n';
 import { api, useData } from '../lib/api';
 import { useTitle } from '../lib/hooks';
 import { formatDate, formatRange, plain } from '../lib/format';
@@ -10,7 +11,7 @@ function Sheet({ items, place }) {
   if (!items?.length) return null;
   return (
     <section className="sec">
-      <h2 className="sheet-title">Снимки</h2>
+      <h2 className="sheet-title">{T('Снимки')}</h2>
       <div className="sheet">
         {items.map((it, i) => (
           <figure key={it.id}>
@@ -24,14 +25,14 @@ function Sheet({ items, place }) {
 }
 
 export function NewsList() {
-  useTitle('Новости');
+  useTitle(T('Новости'));
   const { data, error } = useData(() => api.news());
   if (!data) return <Loading error={error} />;
   return (
     <main>
       <div className="wrap">
-        <PageHead crumbs={<><Link to="/">Главная</Link> / Новости</>} title="Новости проекта"
-          deck="Экспедиции, доклады на конференциях, публикации и итоги этапов гранта." />
+        <PageHead crumbs={<><Link to="/">{T('Главная')}</Link> / {T('Новости')}</>} title={T('Новости проекта')}
+          deck={T('Экспедиции, доклады на конференциях, публикации и итоги этапов гранта.')} />
         <ul className="news-list">
           {data.map((p) => (
             <li key={p.id}>
@@ -54,11 +55,11 @@ export function NewsPost() {
   const { data, error } = useData(() => api.post(id), [id]);
   useTitle(data?.title);
   if (!data) return <Loading error={error} />;
-  const place = /когалым/i.test(data.title) ? 'Когалым' : 'Муравленко';
+  const place = /когалым|kogalym/i.test(data.title) ? T('Когалым') : T('Муравленко');
   return (
     <main>
       <div className="wrap">
-        <PageHead crumbs={<><Link to="/">Главная</Link> / <Link to="/news">Новости</Link></>} title={data.title}>
+        <PageHead crumbs={<><Link to="/">{T('Главная')}</Link> / <Link to="/news">{T('Новости')}</Link></>} title={data.title}>
           <p className="day post-date">{formatDate(data.date)}</p>
         </PageHead>
         <article className="post">
@@ -66,7 +67,7 @@ export function NewsPost() {
           <Html html={data.body} className="measure prose" />
         </article>
         <Sheet items={data.blog_gallery} place={place} />
-        <p className="sec"><Link className="more" to="/news">Все новости</Link></p>
+        <p className="sec"><Link className="more" to="/news">{T('Все новости')}</Link></p>
       </div>
     </main>
   );
@@ -80,7 +81,7 @@ export function Expedition() {
   return (
     <main>
       <div className="wrap">
-        <PageHead crumbs={<><Link to="/">Главная</Link> / <Link to="/materials#expeditions">Экспедиции</Link></>}
+        <PageHead crumbs={<><Link to="/">{T('Главная')}</Link> / <Link to="/materials#expeditions">{T('Экспедиции')}</Link></>}
           title={data.title} deck={`${formatRange(data.date_start, data.date_end)}, ${data.location}`}
           image={data.header_image} />
         <article className="post">

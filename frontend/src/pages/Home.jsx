@@ -1,16 +1,17 @@
 import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { LLink as Link, T, currentLang } from '../lib/i18n';
 import { api, useData } from '../lib/api';
 import { useHashScroll, useTitle } from '../lib/hooks';
 import { photoGroups, splitFigure } from '../lib/format';
 import { GeoBand, Html, Loading, PhotoMeta, Stats } from '../components/Common';
 import { NewsLog } from '../blocks/Embeds';
 
-const passportValue = (city, label) => city.passport?.find((r) => r.value.label === label)?.value.value;
+// строка паспорта по названию: на английской странице название переведено (EN в lib/strings-en.js)
+const passportValue = (city, label) => city.passport?.find((r) => r.value.label === label || r.value.label === T(label))?.value.value;
 
 // Номер гранта не переносится по дефисам
 function NoBreakGrant({ text }) {
-  const parts = text.split(/(№\s?\d{2}-\d{2}-\d{5})/);
+  const parts = text.split(/((?:№|No\.)\s?\d{2}-\d{2}-\d{5})/);
   return parts.map((p, i) => (i % 2 ? <span key={i} className="nw">{p}</span> : p));
 }
 
@@ -55,7 +56,7 @@ function shortTask(text) {
   }
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
-const GOAL_KICKERS = ['Цель проекта', 'Почему это важно', 'Научная новизна'];
+const GOAL_KICKERS = () => [T('Цель проекта'), T('Почему это важно'), T('Научная новизна')];
 
 function About({ home }) {
   const goal = useMemo(() => htmlParts(home.goal, 'p'), [home.goal]);
@@ -64,18 +65,18 @@ function About({ home }) {
   return (
     <section className="part" id="about">
       <div className="wrap">
-        <div className="part-head"><h2>Цель и задачи</h2></div>
+        <div className="part-head"><h2>{T('Цель и задачи')}</h2></div>
         <div className="goal-grid">
           {goal.map((text, i) => (
             <article key={i} className={`goal-card${i === 0 ? ' main' : ''}`}>
-              <span className="kicker">{GOAL_KICKERS[i] || ''}</span>
+              <span className="kicker">{GOAL_KICKERS()[i] || ''}</span>
               <p>{i === 0 || i === 2 ? capital(stripLabel(text)) : text}</p>
             </article>
           ))}
         </div>
         {tasks.length ? (
           <div className="tasks">
-            <h3 className="sub">Задачи проекта</h3>
+            <h3 className="sub">{T('Задачи проекта')}</h3>
             <ol className="task-list">
               {tasks.map((t, i) => (
                 <li key={i} className="step">
@@ -94,11 +95,11 @@ function About({ home }) {
         ) : null}
         <div className="kw-row">
           {keywords.length ? (
-            <ul className="kw-chips" aria-label="Ключевые слова">
+            <ul className="kw-chips" aria-label={T('Ключевые слова')}>
               {keywords.map((k, i) => <li key={k} style={{ '--i': i }}>{k}</li>)}
             </ul>
           ) : null}
-          {home.abstract_en ? (
+          {home.abstract_en && currentLang() !== 'en' ? (
             <details className="en" lang="en">
               <summary>Abstract and keywords in English</summary>
               <Html html={home.abstract_en} />
@@ -106,7 +107,7 @@ function About({ home }) {
             </details>
           ) : null}
           <p className="small about-links">
-            <Link className="more" to="/materials#team">Авторский коллектив</Link>, <Link className="more" to="/materials#expeditions">экспедиции</Link>, <Link className="more" to="/results/2025#methods">методы и данные</Link>
+            <Link className="more" to="/materials#team">{T('Авторский коллектив')}</Link>, <Link className="more" to="/materials#expeditions">{T('экспедиции')}</Link>, <Link className="more" to="/results/2025#methods">{T('методы и данные')}</Link>
           </p>
         </div>
       </div>
@@ -122,7 +123,7 @@ function Years({ home, reports }) {
     <section className="part fog" id="years">
       <div className="wrap">
         <div className="part-head">
-          <h2>Результаты по годам</h2>
+          <h2>{T('Результаты по годам')}</h2>
           {home.years_intro ? <p>{home.years_intro}</p> : null}
         </div>
         <div className={`years${withResults > 1 ? ' two' : ''}`}>
@@ -134,7 +135,7 @@ function Years({ home, reports }) {
                   <div className="year-head"><h3>{r.year}</h3><span>{r.city_label}</span></div>
                   {r.status_label ? <p><span className="chip">{r.status_label}</span></p> : null}
                   {r.summary ? <p>{r.summary}</p> : null}
-                  <Link className="more" to={`/results/${r.year}`}>Подробнее о {r.year} годе</Link>
+                  <Link className="more" to={`/results/${r.year}`}>{T('Подробнее о {year} годе').replace('{year}', r.year)}</Link>
                 </div>
               );
             }
@@ -152,8 +153,8 @@ function Years({ home, reports }) {
                     </li>
                   ))}
                 </ol>
-                <p className="src" style={{ margin: '0.9rem 0 1rem' }}>Источник: отчёт о выполнении проекта в {r.year} году. Пояснения к цифрам на странице результатов.</p>
-                <Link className="more" to={`/results/${r.year}`}>Все результаты {r.year} года: заявлено и сделано</Link>
+                <p className="src" style={{ margin: '0.9rem 0 1rem' }}>{T('Источник: отчёт о выполнении проекта в {year} году. Пояснения к цифрам на странице результатов.').replace('{year}', r.year)}</p>
+                <Link className="more" to={`/results/${r.year}`}>{T('Все результаты {year} года: заявлено и сделано').replace('{year}', r.year)}</Link>
               </div>
             );
           })}
@@ -176,11 +177,11 @@ export function CityDoor({ city }) {
         <h3>{city.title}</h3>
         <p className="where">{city.region}</p>
         <ul className="door-facts">
-          {founded ? <li><b>{founded}</b>год основания</li> : null}
-          {people ? <li><b>{people}</b>жителей</li> : null}
-          {photos ? <li><b>{photos}</b>снимков{work ? `, ${work.replace(/^[\d-]+\s/, '')}` : ''}</li> : null}
+          {founded ? <li><b>{founded}</b>{T('год основания')}</li> : null}
+          {people ? <li><b>{people}</b>{T('жителей')}</li> : null}
+          {photos ? <li><b>{photos}</b>{T('снимков')}{work ? `, ${work.replace(/^[\d-]+\s/, '')}` : ''}</li> : null}
         </ul>
-        <span className="door-go">Открыть страницу города</span>
+        <span className="door-go">{T('Открыть страницу города')}</span>
       </div>
     </Link>
   );
@@ -197,20 +198,20 @@ function Shelves({ materials, pubs, expeditions, team }) {
   const pubCount = (pubs?.publications || []).filter((p) => p.group !== 'related').length;
   const libImg = materials?.header_image;
   const shelf = (anchor, count, title, text) => (
-    <Link className="shelf" to={`/materials#${anchor}`} key={anchor}><b>{count}</b><strong>{title}</strong><span>{text}</span></Link>
+    <Link className="shelf" to={`/materials#${anchor}`} key={anchor}><b>{count}</b><strong>{T(title)}</strong><span>{T(text)}</span></Link>
   );
   return (
     <section className="part fog" id="shelves">
       <div className="wrap">
         <div className="part-head">
-          <h2>Материалы проекта</h2>
-          <p>Вся накопленная фактура: снимки, карты, публикации, доклады и архивные источники.</p>
+          <h2>{T('Материалы проекта')}</h2>
+          <p>{T('Вся накопленная фактура: снимки, карты, публикации, доклады и архивные источники.')}</p>
         </div>
         <div className="shelves">
           <Link className="shelf photo" to="/materials#photos">
             {libImg ? <img src={libImg.large} alt="" loading="lazy" /> : null}
-            <b>{photoTotal.toLocaleString('ru-RU')}</b><strong>Фототека</strong>
-            <span>Полевые снимки экспедиций 2025 и 2026 годов с подписями: парки и скверы, площадки, геоботаника, пески, свалки</span>
+            <b>{photoTotal.toLocaleString(currentLang() === 'en' ? 'en-GB' : 'ru-RU')}</b><strong>{T('Фототека')}</strong>
+            <span>{T('Полевые снимки экспедиций 2025 и 2026 годов с подписями: парки и скверы, площадки, геоботаника, пески, свалки')}</span>
           </Link>
           {shelf('maps', maps, 'Карты и схемы', 'Рисунки из статьи о Муравленко и слои геопортала')}
           {shelf('publications', pubCount, 'Публикации', 'Статьи по результатам проекта')}
@@ -239,19 +240,19 @@ export default function Home() {
   return (
     <main>
       <Cover home={home} />
-      {stats.length ? <section className="wrap" aria-label="Проект в цифрах"><Stats items={stats} /></section> : null}
+      {stats.length ? <section className="wrap" aria-label={T('Проект в цифрах')}><Stats items={stats} /></section> : null}
       <About home={home} />
       <Years home={home} reports={reports} />
       <section className="part" id="cities">
         <div className="wrap">
-          <div className="part-head"><h2>Два модельных города</h2></div>
+          <div className="part-head"><h2>{T('Два модельных города')}</h2></div>
           <div className="doors">{ordered.map((c) => <CityDoor key={c.id} city={c} />)}</div>
         </div>
       </section>
       <Shelves materials={materials} pubs={pubs} expeditions={expeditions} team={team} />
       <section className="part" id="news">
         <div className="wrap">
-          <div className="part-head"><h2>Новости</h2></div>
+          <div className="part-head"><h2>{T('Новости')}</h2></div>
           <NewsLog posts={news} />
         </div>
       </section>

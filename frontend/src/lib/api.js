@@ -1,12 +1,14 @@
 // Запросы к API Wagtail (/wt-api/v2/pages/). Ответы кэшируются на время сессии вкладки:
 // разделы ссылаются друг на друга (главная берёт результаты и города), повторно не грузим.
+// Язык страниц (locale) берётся из адреса: без него API отдаёт страницы обоих языков сразу.
 import { useEffect, useState } from 'react';
+import { currentLang } from './i18n';
 
 const BASE = '/wt-api/v2/pages/';
 const cache = new Map();
 
 export function getPages(params) {
-  const query = new URLSearchParams({ fields: '*', limit: '20', ...params }).toString();
+  const query = new URLSearchParams({ fields: '*', limit: '20', locale: currentLang(), ...params }).toString();
   if (!cache.has(query)) {
     const request = fetch(`${BASE}?${query}`)
       .then((res) => {
@@ -24,6 +26,11 @@ export function getPages(params) {
 }
 
 export const getByType = (type, params = {}) => getPages({ type, ...params });
+
+// id той же страницы на другом языке (для переключателя языка на страницах с id в адресе)
+export function translationId(id, lang) {
+  return getPages({ translation_of: String(id), locale: lang, fields: 'title' }).then((items) => items[0]?.id ?? null);
+}
 export const getOne = (type, params = {}) => getByType(type, params).then((items) => items[0] || null);
 
 export const api = {

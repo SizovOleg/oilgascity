@@ -1,5 +1,9 @@
-// Форматирование для подписей: даты по-русски, диапазоны через дефис, без длинных тире.
-const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+// Форматирование для подписей: даты на языке страницы, диапазоны через дефис, без длинных тире.
+import { currentLang } from './i18n';
+
+const MONTHS_RU = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const months = (lang) => (lang === 'en' ? MONTHS_EN : MONTHS_RU);
 
 function parse(iso) {
   if (!iso) return null;
@@ -7,19 +11,20 @@ function parse(iso) {
   return { y, m, d };
 }
 
-export function formatDate(iso) {
+export function formatDate(iso, lang = currentLang()) {
   const p = parse(iso);
-  return p ? `${p.d} ${MONTHS[p.m - 1]} ${p.y}` : '';
+  return p ? `${p.d} ${months(lang)[p.m - 1]} ${p.y}` : '';
 }
 
-export function formatRange(startIso, endIso) {
+export function formatRange(startIso, endIso, lang = currentLang()) {
   const a = parse(startIso);
   const b = parse(endIso);
+  const M = months(lang);
   if (!a) return '';
-  if (!b || startIso === endIso) return formatDate(startIso);
-  if (a.y === b.y && a.m === b.m) return `${a.d}-${b.d} ${MONTHS[b.m - 1]} ${b.y}`;
-  if (a.y === b.y) return `${a.d} ${MONTHS[a.m - 1]} - ${b.d} ${MONTHS[b.m - 1]} ${b.y}`;
-  return `${formatDate(startIso)} - ${formatDate(endIso)}`;
+  if (!b || startIso === endIso) return formatDate(startIso, lang);
+  if (a.y === b.y && a.m === b.m) return `${a.d}-${b.d} ${M[b.m - 1]} ${b.y}`;
+  if (a.y === b.y) return `${a.d} ${M[a.m - 1]} - ${b.d} ${M[b.m - 1]} ${b.y}`;
+  return `${formatDate(startIso, lang)} - ${formatDate(endIso, lang)}`;
 }
 
 // Убирает внешний <p>, чтобы вставить короткий текст из редактора в строку
@@ -40,7 +45,7 @@ export function plain(html, limit = 0) {
 
 // Первое число в строке вида «29 529 чел. (01.01.2025, Росстат)» и остаток в скобках
 export function splitFigure(text) {
-  const m = (text || '').match(/^([\d\s]+[\d])\s*(.*)$/);
+  const m = (text || '').match(/^([\d\s,]+[\d])\s*(.*)$/);  // «29 529» и английское «29,529»
   if (!m) return { value: text || '', rest: '' };
   return { value: m[1].trim(), rest: m[2].trim() };
 }
@@ -53,7 +58,7 @@ export function photoGroups(counts) {
     const key = `${c.city}, ${c.year}`;
     if (!groups.has(key)) groups.set(key, { key, total: null, items: [] });
     const g = groups.get(key);
-    if (c.theme.trim().toLowerCase() === 'всего') g.total = c.count;
+    if (['всего', 'total'].includes(c.theme.trim().toLowerCase())) g.total = c.count;
     else g.items.push(c);
   }
   return [...groups.values()].map((g) => ({ ...g, total: g.total ?? g.items.reduce((s, c) => s + c.count, 0) }));
