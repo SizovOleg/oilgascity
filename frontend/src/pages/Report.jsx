@@ -6,14 +6,15 @@ import { buildToc, numberBlocks, splitSections } from '../lib/numbering';
 import { Loading, PageHead, Toc } from '../components/Common';
 import { BlockList, Section } from '../blocks/Blocks';
 
-function ReportBody({ page, crumbs, extraHead }) {
+function ReportBody({ page, crumbs, tabs }) {
   const blocks = numberBlocks(page.body);
   const parts = splitSections(blocks);
   return (
     <main>
       <div className="wrap">
         <PageHead crumbs={crumbs} title={page.title} deck={page.intro} image={page.header_image}
-          caption={page.header_caption} meta={page.header_meta}>{extraHead}</PageHead>
+          caption={page.header_caption} meta={page.header_meta} />
+        {tabs}
         <div className="doc">
           <Toc items={buildToc(blocks)} />
           <div>
@@ -28,12 +29,29 @@ function ReportBody({ page, crumbs, extraHead }) {
 }
 
 const hasResults = (r) => (r.body || []).some((b) => b.type === 'result');
+const SUMMARY = 'summary';
+
+// Вкладки результатов: города по годам и «Общие выводы» (страница результатов без года, адрес /results/summary)
+function ResultTabs({ pages, current }) {
+  return (
+    <nav className="result-tabs" aria-label="Результаты проекта">
+      {pages.map((r) => {
+        const label = r.year ? <>{r.city_label}<small>{r.year}</small></> : (r.city_label || 'Общие выводы');
+        return r === current
+          ? <b key={r.id} aria-current="page">{label}</b>
+          : <Link key={r.id} to={`/results/${r.year || SUMMARY}`}>{label}</Link>;
+      })}
+    </nav>
+  );
+}
 
 export function Results() {
   const { year } = useParams();
   const { data, error } = useData(() => api.reports());
-  const years = (data || []).filter((r) => r.kind === 'results').sort((a, b) => a.year - b.year);
-  const page = year ? years.find((r) => String(r.year) === year) : null;
+  const all = (data || []).filter((r) => r.kind === 'results');
+  const years = all.filter((r) => r.year).sort((a, b) => a.year - b.year);
+  const summary = all.find((r) => !r.year);
+  const page = year === SUMMARY ? summary : year ? years.find((r) => String(r.year) === year) : null;
   useTitle(page?.title || 'Результаты');
   useHashScroll(Boolean(page));
   if (!data) return <Loading error={error} />;
@@ -43,14 +61,9 @@ export function Results() {
     return latest ? <Navigate to={`/results/${latest.year}`} replace /> : <Loading error />;
   }
   if (!page) return <Loading error />;
-  const tabs = years.length > 1 ? (
-    <p className="year-tabs">
-      {years.map((r) => (String(r.year) === year
-        ? <b key={r.id}>{r.year}: {r.city_label}</b>
-        : <Link key={r.id} to={`/results/${r.year}`}>{r.year}: {r.city_label}</Link>))}
-    </p>
-  ) : null;
-  return <ReportBody page={page} extraHead={tabs} crumbs={<><Link to="/">Главная</Link> / Результаты</>} />;
+  const pages = [...years, ...(summary ? [summary] : [])];
+  const tabs = pages.length > 1 ? <ResultTabs pages={pages} current={page} /> : null;
+  return <ReportBody page={page} tabs={tabs} crumbs={<><Link to="/">Главная</Link> / Результаты</>} />;
 }
 
 export function Materials() {

@@ -1,5 +1,5 @@
 // Вставки данных других разделов в страницы материалов: публикации, экспедиции, коллектив, фототека.
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, useData } from '../lib/api';
 import { formatDate, formatRange, photoGroups, THEME_LABELS, STATUS_LABELS } from '../lib/format';
@@ -134,6 +134,7 @@ export function Embed({ kind }) {
 
 const cityOf = (place) => (/когалым/i.test(place) ? 'kog' : 'mur');
 const yearOf = (date) => (date.match(/20\d\d/) || [''])[0];
+const COLLAPSED = 12; // снимков в свёрнутой фототеке: три ряда по четыре
 
 function collectPhotos(cities, expeditions, posts) {
   const seen = new Set();
@@ -151,13 +152,14 @@ function collectPhotos(cities, expeditions, posts) {
   return out;
 }
 
+// options: [значение, подпись, число снимков]; кнопка без снимков при текущих фильтрах неактивна
 function FilterGroup({ label, group, options, state, setState }) {
   return (
     <div>
       <span>{label}</span>
-      {options.map(([value, text]) => (
-        <button key={value} type="button" aria-pressed={state[group] === value}
-          onClick={() => setState({ ...state, [group]: value })}>{text}</button>
+      {options.map(([value, text, count]) => (
+        <button key={value} type="button" aria-pressed={state[group] === value} disabled={count === 0 && state[group] !== value}
+          onClick={() => setState({ ...state, [group]: value })}>{text}{count !== undefined ? <small> {count}</small> : null}</button>
       ))}
     </div>
   );
@@ -169,32 +171,52 @@ export function PhotoLibrary({ value }) {
   const photos = useMemo(() => (data ? collectPhotos(...data) : []), [data]);
   const themes = useMemo(() => [...new Set(photos.map((p) => p.theme).filter(Boolean))], [photos]);
   const years = useMemo(() => [...new Set(photos.map((p) => p.year).filter(Boolean))].sort(), [photos]);
-  const shown = photos.filter((p) => (state.city === 'all' || p.city === state.city)
-    && (state.theme === 'all' || p.theme === state.theme)
-    && (state.year === 'all' || p.year === state.year));
+  const [open, setOpen] = useState(false); // сетка свёрнута до трёх рядов, чтобы не листать сотни снимков
+  const topRef = useRef(null);
+  const pass = (p, skip) => (skip === 'city' || state.city === 'all' || p.city === state.city)
+    && (skip === 'theme' || state.theme === 'all' || p.theme === state.theme)
+    && (skip === 'year' || state.year === 'all' || p.year === state.year);
+  const shown = photos.filter((p) => pass(p));
+  // число снимков у кнопки фильтра при остальных выбранных фильтрах
+  const countBy = (group, value) => photos.filter((p) => pass(p, group) && (value === 'all' || p[group] === value)).length;
+  const visible = open ? shown : shown.slice(0, COLLAPSED);
+  const fmt = (n) => n.toLocaleString('ru-RU');
+  const groups = photoGroups(value.counts);
+  const archived = groups.reduce((s, g) => s + g.total, 0);
+  const collapse = () => {
+    setOpen(false);
+    // после перерисовки (сетка уже короче) страница возвращается к фильтрам
+    requestAnimationFrame(() => topRef.current?.scrollIntoView({ block: 'start' }));
+  };
 
   return (
     <>
       <InlineHtml html={value.intro} as="p" className="measure" />
-      {photoGroups(value.counts).map((g) => (
+      {photos.length && archived ? (
+        <p className="measure archive-note">
+          Всего в экспедициях получено <b>{fmt(archived)}</b> снимков. На сайте опубликовано <b>{fmt(photos.length)}</b>:
+          отобранные кадры с подписями. Остальные хранятся в архиве проекта.
+        </p>
+      ) : null}
+      {groups.map((g) => (
         <div key={g.key} className="count-group">
-          <h3>{g.key}: {g.total.toLocaleString('ru-RU')} снимков</h3>
+          <h3>{g.key}: {fmt(g.total)} снимков в архиве, {fmt(photos.filter((p) => p.city === cityOf(g.key)).length)} на сайте</h3>
           {g.items.length ? (
             <ul className="counts">{g.items.map((c, i) => <li key={i}>{c.theme} <b>{c.count}</b></li>)}</ul>
           ) : null}
         </div>
       ))}
-      <div className="filters" role="group" aria-label="Фильтры фототеки">
+      <div className="filters" role="group" aria-label="Фильтры фототеки" ref={topRef}>
         <FilterGroup label="Город" group="city" state={state} setState={setState}
-          options={[['all', 'все'], ['mur', 'Муравленко'], ['kog', 'Когалым']]} />
+          options={[['all', 'все'], ['mur', 'Муравленко'], ['kog', 'Когалым']].map(([v, t]) => [v, t, countBy('city', v)])} />
         <FilterGroup label="Тема" group="theme" state={state} setState={setState}
-          options={[['all', 'все'], ...themes.map((t) => [t, THEME_LABELS[t] || t])]} />
+          options={[['all', 'все'], ...themes.map((t) => [t, THEME_LABELS[t] || t])].map(([v, t]) => [v, t, countBy('theme', v)])} />
         <FilterGroup label="Год" group="year" state={state} setState={setState}
-          options={[['all', 'все'], ...years.map((y) => [y, y])]} />
+          options={[['all', 'все'], ...years.map((y) => [y, y])].map(([v, t]) => [v, t, countBy('year', v)])} />
       </div>
       <p className="shown">Показано снимков: <b>{shown.length}</b></p>
       <ul className="shots">
-        {shown.map((p, i) => (
+        {visible.map((p, i) => (
           <li key={p.image.original}>
             <ZoomLink items={galleryItems(shown)} index={i}><img src={p.image.thumbnail} alt={p.caption} loading="lazy" /></ZoomLink>
             <span className="slate">{p.caption}
@@ -203,6 +225,13 @@ export function PhotoLibrary({ value }) {
           </li>
         ))}
       </ul>
+      {shown.length > COLLAPSED ? (
+        <p className="shots-more">
+          {open
+            ? <button type="button" onClick={collapse}>Свернуть фототеку</button>
+            : <button type="button" onClick={() => setOpen(true)}>Показать все {fmt(shown.length)} снимков</button>}
+        </p>
+      ) : null}
     </>
   );
 }

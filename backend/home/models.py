@@ -657,4 +657,5 @@ class ReportPage(FrontendUrlMixin, Page):
     def get_frontend_path(self) -> str | None:
         if self.kind == self.KIND_MATERIALS:
             return "/materials"
-        return f"/results/{self.year}" if self.year else "/results"
+        # результаты без года: общие выводы проекта по обоим городам
+        return f"/results/{self.year}" if self.year else "/results/summary"

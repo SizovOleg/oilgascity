@@ -28,8 +28,15 @@
 /* Результаты: карта под пунктом и вкладки годов */
 .res-map { max-width: 30rem; margin-top: 1rem; }
 .res-map .fig { margin-bottom: 0; }
-.year-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem 1.2rem; margin: 1.2rem 0 0; font-size: 0.92rem; }
-.year-tabs b { box-shadow: inset 0 -3px 0 var(--tape); }
+/* вкладки результатов: Муравленко, Когалым, Общие выводы (ResultTabs в pages/Report.jsx) */
+.result-tabs { display: flex; flex-wrap: wrap; margin: 2rem 0 0; border-bottom: 2px solid var(--ink); }
+.result-tabs a, .result-tabs b { display: flex; align-items: baseline; gap: 0.45rem; margin-bottom: -2px; padding: 0.8rem 1.5rem 0.75rem; border: 2px solid transparent; border-bottom: 0; color: var(--ink); font-size: 1.2rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.result-tabs a:hover, .result-tabs a:focus-visible { background: var(--fog); outline: none; }
+.result-tabs b { border-color: var(--ink); background: var(--snow); box-shadow: inset 0 4px 0 var(--tape); }
+.result-tabs small { color: var(--mute); font-size: 0.85rem; font-weight: 500; }
+.result-tabs + .doc { margin-top: 2rem; }
+@media (max-width: 760px) { .result-tabs a, .result-tabs b { padding: 0.65rem 0.9rem 0.6rem; font-size: 1rem; } }
+@media (max-width: 480px) { .result-tabs small { display: none; } .result-tabs a, .result-tabs b { padding: 0.6rem 0.7rem 0.55rem; } }
 .cite-note { margin-top: 0.8rem; max-width: 52em; }
 
 /* Плашки: пара и одиночная */
@@ -196,3 +203,11 @@
 .to-top:hover, .to-top:focus-visible { background: var(--tape); outline: none; }
 @media (max-width: 760px) { .to-top { right: 0.9rem; bottom: 0.9rem; width: 2.6rem; height: 2.6rem; } }
 @media print { .to-top { display: none; } }
+
+/* фототека: число у кнопок фильтра, пустые темы неактивны, кнопка раскрытия сетки */
+.filters button small { margin-left: 0.15rem; font-size: 0.92em; opacity: 0.65; }
+.filters button:disabled { border-color: var(--line); color: var(--mute); cursor: default; opacity: 0.6; }
+.archive-note { margin-top: 0.6rem; }
+.shots-more { margin: 1.2rem 0 0; text-align: center; }
+.shots-more button { font: inherit; font-size: 0.92rem; font-weight: 700; padding: 0.65rem 1.4rem; border: 2px solid var(--ink); border-radius: 999px; background: var(--snow); color: var(--ink); cursor: pointer; }
+.shots-more button:hover, .shots-more button:focus-visible { background: var(--ink); color: var(--snow); outline: none; }
