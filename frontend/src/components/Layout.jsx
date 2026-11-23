@@ -66,6 +66,26 @@ export function Footer() {
   );
 }
 
+// Кнопка «наверх»: появляется, когда страница прокручена дальше полутора экранов
+const scrolledFar = () => window.scrollY > window.innerHeight * 1.5;
+
+function ToTop() {
+  const [show, setShow] = useState(scrolledFar);
+  useEffect(() => {
+    const onScroll = () => setShow(scrolledFar());
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  return (
+    <button type="button" className={`to-top${show ? ' on' : ''}`} aria-label="Наверх" title="Наверх"
+      tabIndex={show ? 0 : -1} aria-hidden={!show} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+      <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M8 13V3M3.5 7.5 8 3l4.5 4.5" />
+      </svg>
+    </button>
+  );
+}
+
 export default function Layout() {
   const { pathname } = useLocation();
   useRevealOnScroll();
@@ -77,6 +97,7 @@ export default function Layout() {
       <Header />
       <Outlet />
       <Footer />
+      <ToTop />
       <LightboxHost />
     </>
   );

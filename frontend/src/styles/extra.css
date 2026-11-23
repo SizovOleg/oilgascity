@@ -189,3 +189,10 @@
 @media (min-width: 901px) {
   .figs2 .fig.frame img[style] { aspect-ratio: var(--box-ratio); object-fit: contain; }
 }
+
+/* Кнопка «наверх» (ToTop в components/Layout.jsx) */
+.to-top { position: fixed; right: 1.4rem; bottom: 1.4rem; z-index: 50; display: flex; align-items: center; justify-content: center; width: 2.9rem; height: 2.9rem; border: 0; border-radius: 50%; background: var(--ink); color: var(--snow); box-shadow: 0 4px 16px rgba(20, 36, 43, 0.25); cursor: pointer; opacity: 0; transform: translateY(0.6rem); pointer-events: none; transition: opacity 0.2s, transform 0.2s, background 0.2s; }
+.to-top.on { opacity: 1; transform: none; pointer-events: auto; }
+.to-top:hover, .to-top:focus-visible { background: var(--tape); outline: none; }
+@media (max-width: 760px) { .to-top { right: 0.9rem; bottom: 0.9rem; width: 2.6rem; height: 2.6rem; } }
+@media print { .to-top { display: none; } }
