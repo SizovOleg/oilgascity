@@ -3,6 +3,8 @@ import { api, useData } from '../lib/api';
 import { useTitle } from '../lib/hooks';
 import { formatDate, formatRange, plain } from '../lib/format';
 import { Html, Loading, PageHead, PhotoMeta } from '../components/Common';
+import { ZoomLink } from '../components/Lightbox';
+import { galleryItems } from '../lib/lightbox';
 
 function Sheet({ items, place }) {
   if (!items?.length) return null;
@@ -10,9 +12,9 @@ function Sheet({ items, place }) {
     <section className="sec">
       <h2 className="sheet-title">Снимки</h2>
       <div className="sheet">
-        {items.map((it) => (
+        {items.map((it, i) => (
           <figure key={it.id}>
-            <a href={it.image.original} target="_blank" rel="noreferrer"><img src={it.image.large} alt={it.caption} loading="lazy" /></a>
+            <ZoomLink items={galleryItems(items, place)} index={i}><img src={it.image.large} alt={it.caption} loading="lazy" /></ZoomLink>
             <figcaption className="slate">{it.caption}<PhotoMeta place={place} date={it.shot_date} author={it.author} /></figcaption>
           </figure>
         ))}

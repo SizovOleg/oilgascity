@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { PinIcon } from './Icons';
+import { LightboxHost } from './Lightbox';
 import { useRevealOnScroll } from '../lib/motion';
 
 const NAV = [
@@ -76,6 +77,7 @@ export default function Layout() {
       <Header />
       <Outlet />
       <Footer />
+      <LightboxHost />
     </>
   );
 }

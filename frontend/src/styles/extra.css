@@ -167,3 +167,25 @@
   .news-list h2 { font-size: 1.15rem; }
   .other-title { font-size: 2rem !important; }
 }
+
+/* Просмотр фото и карт поверх страницы (components/Lightbox.jsx) */
+.zoom { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 3rem 4.5rem; background: rgba(12, 18, 22, 0.9); cursor: zoom-out; }
+.zoom figure { margin: 0; display: flex; flex-direction: column; align-items: center; max-width: 100%; max-height: 100%; cursor: default; }
+.zoom img { width: auto; height: auto; max-width: 100%; max-height: calc(100vh - 8.5rem); background: #fff center / contain no-repeat; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45); }
+.zoom figcaption { margin-top: 0.7rem; max-width: 72ch; color: #E8EEF0; font-size: 0.9rem; line-height: 1.45; text-align: center; }
+.zoom figcaption span { margin-left: 0.6rem; opacity: 0.7; white-space: nowrap; }
+.zoom-close, .zoom-nav { position: absolute; width: 2.7rem; height: 2.7rem; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.14); color: #fff; font-size: 1.7rem; line-height: 1; cursor: pointer; }
+.zoom-close { top: 1rem; right: 1rem; }
+.zoom-nav { top: 50%; transform: translateY(-50%); }
+.zoom-nav.prev { left: 1rem; }
+.zoom-nav.next { right: 1rem; }
+.zoom-close:hover, .zoom-nav:hover, .zoom-close:focus-visible, .zoom-nav:focus-visible { background: rgba(255, 255, 255, 0.3); outline: none; }
+@media (max-width: 760px) {
+  .zoom { padding: 3.6rem 0.5rem 4.4rem; }
+  .zoom-nav { top: auto; bottom: 0.8rem; transform: none; }
+}
+.zoom-link { display: block; cursor: zoom-in; }
+/* атлас: карты одного ряда в рамках одной высоты, картинка целиком внутри (Atlas в blocks/Blocks.jsx) */
+@media (min-width: 901px) {
+  .figs2 .fig.frame img[style] { aspect-ratio: var(--box-ratio); object-fit: contain; }
+}

@@ -143,12 +143,24 @@ function Bibliography({ value }) {
   return <ol className="bib">{value.items.map((it, i) => <InlineHtml key={i} html={it} as="li" />)}</ol>;
 }
 
+// Атлас карт в две колонки: у карт одного ряда рамки одной высоты. Пропорция рамки ряда берётся от самой
+// высокой карты (наименьшее отношение ширины к высоте), более широкая карта целиком вписывается в рамку
+function Atlas({ value }) {
+  const figs = value.figures || [];
+  const aspect = (f) => (f.image?.width && f.image?.height ? f.image.width / f.image.height : null);
+  const rowRatio = (i) => {
+    const row = figs.slice(i - (i % 2), i - (i % 2) + 2).map(aspect).filter(Boolean);
+    return row.length === 2 ? Math.min(...row) : undefined;
+  };
+  return <div className="figs2">{figs.map((f, i) => <Figure key={i} fig={f} ratio={rowRatio(i)} />)}</div>;
+}
+
 const RENDER = {
   paragraph: ({ value }) => <Html html={value} className="measure prose" />,
   stats: ({ value }) => <Stats items={value.items} className="figures in-doc" />,
   result: Result,
   figure: ({ value }) => <Figure fig={value} />,
-  atlas: ({ value }) => <div className="figs2">{value.figures.map((f, i) => <Figure key={i} fig={f} />)}</div>,
+  atlas: Atlas,
   bar_chart: BarChart,
   pair_chart: PairChart,
   methods_table: MethodsTable,

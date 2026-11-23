@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { api, useData } from '../lib/api';
 import { formatDate, formatRange, photoGroups, THEME_LABELS, STATUS_LABELS } from '../lib/format';
 import { Html, InlineHtml, PhotoMeta } from '../components/Common';
+import { ZoomLink } from '../components/Lightbox';
+import { galleryItems } from '../lib/lightbox';
 
 function PubEntry({ p }) {
   const status = STATUS_LABELS[p.status];
@@ -41,9 +43,9 @@ export function Strip({ items, label, limit = 8 }) {
   if (!items?.length) return null;
   return (
     <div className="strip" tabIndex={0} aria-label={label}>
-      {items.slice(0, limit).map((it) => (
+      {items.slice(0, limit).map((it, i) => (
         <figure key={it.id}>
-          <img src={it.image.large} alt={it.caption} loading="lazy" />
+          <ZoomLink items={galleryItems(items.slice(0, limit))} index={i}><img src={it.image.large} alt={it.caption} loading="lazy" /></ZoomLink>
           <figcaption className="slate">{it.caption}</figcaption>
         </figure>
       ))}
@@ -192,9 +194,9 @@ export function PhotoLibrary({ value }) {
       </div>
       <p className="shown">Показано снимков: <b>{shown.length}</b></p>
       <ul className="shots">
-        {shown.map((p) => (
+        {shown.map((p, i) => (
           <li key={p.image.original}>
-            <a href={p.image.original} target="_blank" rel="noreferrer"><img src={p.image.thumbnail} alt={p.caption} loading="lazy" /></a>
+            <ZoomLink items={galleryItems(shown)} index={i}><img src={p.image.thumbnail} alt={p.caption} loading="lazy" /></ZoomLink>
             <span className="slate">{p.caption}
               <PhotoMeta place={p.place} date={p.shot_date} theme={THEME_LABELS[p.theme]} author={p.author} />
             </span>

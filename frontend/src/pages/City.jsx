@@ -4,6 +4,8 @@ import { useHashScroll, useTitle } from '../lib/hooks';
 import { splitFigure } from '../lib/format';
 import { Counter, buildToc, numberBlocks, splitSections } from '../lib/numbering';
 import { Figure, GeoBand, Html, Loading, PhotoMeta, Toc } from '../components/Common';
+import { ZoomLink } from '../components/Lightbox';
+import { galleryItems } from '../lib/lightbox';
 import { BlockList, Section } from '../blocks/Blocks';
 
 const OTHER = { muravlenko: 'kogalym', kogalym: 'muravlenko' };
@@ -32,9 +34,9 @@ function Gallery({ city }) {
       <h2>Город в снимках</h2>
       <p className="measure">Открытые пространства города. Все снимки проекта собраны в разделе <Link to="/materials#photos">«Фототека»</Link>.</p>
       <div className="sheet">
-        {items.map((it) => (
+        {items.map((it, i) => (
           <figure key={it.id}>
-            <a href={it.image.original} target="_blank" rel="noreferrer"><img src={it.image.large} alt={it.caption} loading="lazy" /></a>
+            <ZoomLink items={galleryItems(items, city.title)} index={i}><img src={it.image.large} alt={it.caption} loading="lazy" /></ZoomLink>
             <figcaption className="slate">{it.caption}<PhotoMeta place={city.title} date={it.shot_date} author={it.author} /></figcaption>
           </figure>
         ))}

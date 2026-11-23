@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PinIcon } from './Icons';
+import { ZoomLink } from './Lightbox';
 import { inline } from '../lib/format';
 import { CountUp } from './Motion';
 
@@ -38,25 +39,31 @@ export function Source({ text, html }) {
   return <span className="src">{withSourcePrefix(text)}</span>;
 }
 
-// Рисунок: снимок с метаданными или карта в рамке со ссылкой на полный размер
-export function Figure({ fig, className = '', compact = false }) {
+// Рисунок: снимок с метаданными или карта в рамке. Щелчок открывает полный размер в окне на странице.
+// ratio: общая пропорция рамки для карт одного ряда (атлас), чтобы рамки были одной высоты
+export function Figure({ fig, className = '', compact = false, ratio }) {
   if (!fig?.image) return null;
   const n = fig._fig;
   const id = n ? `fig-${n}` : undefined;
   const label = n ? <b>Рис. {n}.</b> : null;
+  const zoom = [{
+    src: fig.image.original, preview: fig.image.large, width: fig.image.width, height: fig.image.height,
+    caption: `${n ? `Рис. ${n}. ` : ''}${fig.caption || ''}`,
+  }];
   if (fig.kind === 'map') {
     return (
       <figure className={`fig frame ${className}`} id={id}>
-        <a href={fig.image.original} target="_blank" rel="noreferrer" title="Открыть в полном размере">
-          <img src={fig.image.large} alt={fig.caption} loading="lazy" width={fig.image.width} height={fig.image.height} />
-        </a>
+        <ZoomLink items={zoom}>
+          <img src={fig.image.large} alt={fig.caption} loading="lazy" width={fig.image.width} height={fig.image.height}
+            style={ratio ? { '--box-ratio': ratio } : undefined} />
+        </ZoomLink>
         <figcaption className="slate">{label} {fig.caption}<Source text={fig.source} /></figcaption>
       </figure>
     );
   }
   return (
     <figure className={compact ? className : `fig ${className}`} id={id}>
-      <img src={fig.image.large} alt={fig.caption} loading="lazy" />
+      <ZoomLink items={zoom}><img src={fig.image.large} alt={fig.caption} loading="lazy" /></ZoomLink>
       <figcaption className="slate">{label} {fig.caption}
         <PhotoMeta place={fig.place} date={fig.date} theme={fig.theme} />
         <Source text={fig.source} />
