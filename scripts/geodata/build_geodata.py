@@ -142,21 +142,24 @@ def polygonal(g):
 
 
 def write_vector_tiles(gdf: gpd.GeoDataFrame, d: Path, name: str, props: list[str], minzoom: int = 11,
-                       maxzoom: int = 16) -> dict:
+                       maxzoom: int = 16, simplify: float = 0) -> dict:
     """Векторные тайлы MVT (каталог <name>_tiles/{z}/{x}/{y}.pbf) для тяжёлого сплошного слоя.
     Контуры исходные, по одному объекту; соседи квантуются на одну сетку тайла, поэтому щелей нет, а браузер
-    грузит только тайлы на экране (MapLibre дорисовывает крупнее maxzoom из тайлов maxzoom). Пишет GDAL (pyogrio)."""
+    грузит только тайлы на экране (MapLibre дорисовывает крупнее maxzoom из тайлов maxzoom). Пишет GDAL (pyogrio).
+    simplify: упрощение в единицах тайла на всех масштабах, кроме maxzoom (там всегда как есть). Упрощает GDAL
+    каждый контур отдельно, поэтому между соседями появляются щели: для объектов слоя упрощение не включать.
+    MAX_SIZE поднят с 500 КБ: иначе GDAL выкидывает контуры из переполненного тайла."""
     out = d / f"{name}_tiles"
     if out.exists():
         shutil.rmtree(out)
     d.mkdir(parents=True, exist_ok=True)
     # encoding явно: на Windows pyogrio иначе пишет строки в кодировке системы, и названия классов портятся
     pyogrio.write_dataframe(gdf[props + ["geometry"]].to_crs("EPSG:3857"), out, layer=name, driver="MVT", encoding="UTF-8",
-                            # упрощение в 4 единицы тайла (меньше пикселя на экране) до предпоследнего масштаба:
-                            # объём тайлов вдвое меньше, а maxzoom остаётся точным для крупных масштабов
+                            # SIMPLIFICATION_MAX_ZOOM у GDAL: коэффициент упрощения на maxzoom (не номер масштаба)
                             dataset_options={"FORMAT": "DIRECTORY", "COMPRESS": "NO", "TILE_EXTENSION": "pbf",
                                              "MINZOOM": str(minzoom), "MAXZOOM": str(maxzoom), "NAME": name,
-                                             "SIMPLIFICATION": "4", "SIMPLIFICATION_MAX_ZOOM": str(maxzoom - 1)})
+                                             "SIMPLIFICATION": str(simplify), "SIMPLIFICATION_MAX_ZOOM": "0",
+                                             "MAX_SIZE": "3000000"})
     tiles = list(out.rglob("*.pbf"))
     print(f"  {out.name}: {len(gdf)} объектов, {len(tiles)} тайлов z{minzoom}-{maxzoom}, "
           f"{sum(t.stat().st_size for t in tiles) / 1e6:.1f} МБ")
@@ -164,12 +167,12 @@ def write_vector_tiles(gdf: gpd.GeoDataFrame, d: Path, name: str, props: list[st
 
 
 def surface_tiles(surface: gpd.GeoDataFrame, obj: gpd.GeoDataFrame, field: str, d: Path, props: list[str]) -> list[dict]:
-    """Типы поверхности в двух наборах тайлов. До 14-го масштаба: классы, слитые и обобщённые (фрагменты меньше 50 м²
-    отброшены, щели меньше пикселя), иначе десятки тысяч контуров не помещаются в предел тайла GDAL и выпадают.
-    С 14-го: исходные объекты с номером oid (щелчок и таблица). show: масштабы, на которых набор виден."""
+    """Типы поверхности в двух наборах тайлов. С 14-го масштаба исходные объекты как есть, без упрощения
+    (решение владельца 23.11), с номером oid для щелчка и таблицы. Ниже 14-го, на обзоре города (пиксель больше 4 м),
+    классы слиты и обобщены: десятки тысяч исходных контуров дали бы тайлы по 2-3 МБ. show: масштабы показа набора."""
     lo = with_names(dissolve(surface, field, 50, 3.0).rename(columns={field: "cls"}))
     return [{**write_vector_tiles(obj, d, "surface", props, minzoom=14, maxzoom=16), "show": [14, 24]},
-            {**write_vector_tiles(lo, d, "surface_lo", ["cls", "name"], minzoom=11, maxzoom=13), "show": [0, 14]}]
+            {**write_vector_tiles(lo, d, "surface_lo", ["cls", "name"], minzoom=11, maxzoom=13, simplify=4), "show": [0, 14]}]
 
 
 def clean(value, digits: int = 2):
